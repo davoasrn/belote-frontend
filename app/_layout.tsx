@@ -1,29 +1,41 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { SocketProvider } from '../context/SocketContext';
+import { useEffect } from 'react';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+const InitialLayout = () => {
+  const { authState } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  useEffect(() => {
+    const inTabsGroup = segments[0] === '(tabs)';
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
+    if (authState?.authenticated && !inTabsGroup) {
+      // Redirect to the main app
+      router.replace('/(tabs)');
+    } else if (!authState?.authenticated) {
+      // Redirect to the login page
+      router.replace('/login');
+    }
+  }, [authState]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ title: 'Login' }} />
+      <Stack.Screen name="register" options={{ title: 'Create Account' }} />
+      <Stack.Screen name="[gameId]" options={{ title: 'Game Board' }} />
+    </Stack>
+  );
+};
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <SocketProvider>
+        <InitialLayout />
+      </SocketProvider>
+    </AuthProvider>
   );
 }
