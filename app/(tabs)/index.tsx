@@ -1,95 +1,79 @@
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Button, TextInput, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, Button, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useSocket } from '../../context/SocketContext';
 
 export default function HomeScreen() {
-  const [playerName, setPlayerName] = useState('');
-  const { socket, gameState, error, setGameState } = useSocket();
+  const [lobbyId, setLobbyId] = useState('');
+  const { socket, error, lobbyState, setLobbyState, setGameState } = useSocket();
   const router = useRouter();
-  const pathname = usePathname(); // Get the current URL path
 
   useEffect(() => {
-    // Only navigate if we are on the home screen ('/') and a new game has started.
-    // This prevents re-navigating on every subsequent game update when this screen
-    // is in the background of the navigation stack.
-    if (gameState && gameState.gameId && pathname === '/') {
-      router.push(`/${gameState.gameId}`);
+    // When lobbyState is updated, it means we've successfully joined or created a lobby.
+    if (lobbyState) {
+      router.push(`/lobby/${lobbyState.gameId}`);
     }
-  }, [gameState, router, pathname]);
+  }, [lobbyState]);
 
-  const handleCreateGame = () => {
-    if (socket && playerName) {
-      // Reset local game state before creating a new one
+  const handleCreateLobby = () => {
+    if (socket) {
+      // Clear any previous game/lobby state before creating a new one
       setGameState(null);
-      socket.emit('createGame', playerName);
+      setLobbyState(null);
+      socket.emit('createLobby');
+    }
+  };
+
+  const handleJoinLobby = () => {
+    if (socket && lobbyId) {
+      setGameState(null);
+      setLobbyState(null);
+      socket.emit('joinLobby', lobbyId);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.lobby}>
-        <Text style={styles.title}>Welcome to Belote!</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter your name"
-          value={playerName}
-          onChangeText={setPlayerName}
-          placeholderTextColor="#9ca3af"
-        />
-        <Button
-          title="Create New Game"
-          onPress={handleCreateGame}
-          disabled={!playerName || !socket?.connected}
-        />
-        {error && <Text style={styles.errorText}>{error}</Text>}
-        {!socket?.connected && !error && (
-          <Text style={styles.infoText}>Connecting to server...</Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>Bazar Belote</Text>
+        
+        {!socket?.connected ? (
+          <ActivityIndicator size="large" color="#1d4ed8" />
+        ) : (
+          <>
+            <Button
+              title="Create New Game Lobby"
+              onPress={handleCreateLobby}
+            />
+            
+            <Text style={styles.divider}>- OR -</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Lobby ID to Join"
+              value={lobbyId}
+              onChangeText={setLobbyId}
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+            />
+            <Button
+              title="Join Lobby"
+              onPress={handleJoinLobby}
+              disabled={!lobbyId}
+            />
+          </>
         )}
+        {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-  },
-  lobby: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 30,
-  },
-  input: {
-    height: 50,
-    width: '90%',
-    borderColor: '#94a3b8',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-    fontSize: 16,
-    color: '#0f172a',
-    backgroundColor: '#fff',
-  },
-  errorText: {
-    color: '#ef4444',
-    textAlign: 'center',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  infoText: {
-    color: '#64748b',
-    textAlign: 'center',
-    marginTop: 16,
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: '#f1f5f9' },
+  content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#0f172a', marginBottom: 50 },
+  divider: { fontSize: 16, color: '#64748b', marginVertical: 24 },
+  input: { height: 50, width: '90%', borderColor: '#94a3b8', borderWidth: 1, borderRadius: 8, paddingHorizontal: 15, marginBottom: 12, fontSize: 16, textAlign: 'center', color: '#0f172a', backgroundColor: '#fff' },
+  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 20, fontSize: 16 },
 });

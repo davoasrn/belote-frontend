@@ -1,11 +1,11 @@
-import { ReactNode } from "react";
-
 export enum Suit {
   Clubs = 'Clubs',
   Diamonds = 'Diamonds',
   Hearts = 'Hearts',
   Spades = 'Spades',
 }
+
+export type TrumpSuit = Suit | 'No-Trump';
 
 export enum Rank {
   Seven = '7',
@@ -23,37 +23,71 @@ export interface Card {
   rank: Rank;
 }
 
-export interface Player {
-  disconnected?: boolean;
-  id: string;
-  name: string;
-  hand: Card[];
+export enum CombinationType {
+  Terz = 'Terz',
+  Fifty = 'Fifty',
+  Hundred = 'Hundred',
+  FourOfAKind = 'FourOfAKind',
+  BeloteRebelote = 'BeloteRebelote',
 }
 
-export interface Bid {
-  suit: Suit;
+export interface Combination {
+  type: CombinationType;
+  cards: Card[];
+  points: number;
   player: Player['id'];
 }
 
+export interface Player {
+  id: string;
+  name: string;
+  hand: Card[];
+  isBot?: boolean;
+  disconnected?: boolean;
+  declaredCombinations?: Combination[];
+}
+
+export interface ContractBid {
+  type: 'bid';
+  player: Player['id'];
+  suit: TrumpSuit;
+  points: number;
+}
+
+export interface Pass {
+  type: 'pass';
+  player: Player['id'];
+}
+
+export type BidAction = ContractBid | Pass;
+
 export enum GamePhase {
   Bidding = 'Bidding',
+  CombinationDeclaration = 'CombinationDeclaration',
   Playing = 'Playing',
   Scoring = 'Scoring',
   Finished = 'Finished',
 }
 
 export interface GameState {
-  winningTeam: ReactNode;
   gameId: string;
   players: [Player, Player, Player, Player];
   deck: Card[];
+  dealerIndex: number;
   currentTurnPlayerIndex: number;
   phase: GamePhase;
-  bids: Bid[];
-  trumpSuit?: Suit;
-  currentTrick: { card: Card; playerId: Player['id'] }[];
+  bidHistory: BidAction[];
+  winningBid?: ContractBid;
+  trumpSuit?: TrumpSuit;
+  currentTrick: { card: Card; playerId: string }[];
   teamScores: {
     team1: number;
     team2: number;
   };
+  roundPoints: {
+    team1: number;
+    team2: number;
+  };
+  gameOver: boolean;
+  winningTeam?: 'Team 1' | 'Team 2';
 }
