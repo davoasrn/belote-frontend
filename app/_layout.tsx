@@ -1,3 +1,4 @@
+// app/_layout.tsx
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { SocketProvider } from '../context/SocketContext';
@@ -14,17 +15,17 @@ const InitialLayout = () => {
     if (authState?.authenticated && !inTabsGroup) {
       // Redirect to the main app
       router.replace('/(tabs)');
-    } else if (!authState?.authenticated) {
-      // Redirect to the login page
+    } else if (!authState?.authenticated && inTabsGroup) {
+      // Redirect to the login page if not authenticated and trying to access tabs
       router.replace('/login');
     }
-  }, [authState]);
+  }, [authState, segments]);
 
   return (
     <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ title: 'Login' }} />
+      <Stack.Screen name="login" options={{ title: 'Login', headerShown: false }} />
       <Stack.Screen name="register" options={{ title: 'Create Account' }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="[gameId]" options={{ title: 'Game Board' }} />
     </Stack>
   );

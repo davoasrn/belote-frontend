@@ -23,6 +23,14 @@ export interface Card {
   rank: Rank;
 }
 
+/**
+ * Represents user-selectable preferences for customizing the game's appearance.
+ */
+export interface PlayerPreferences {
+  cardBack?: string;
+  tableTheme?: string;
+}
+
 export enum CombinationType {
   Terz = 'Terz',
   Fifty = 'Fifty',
@@ -45,6 +53,7 @@ export interface Player {
   isBot?: boolean;
   disconnected?: boolean;
   declaredCombinations?: Combination[];
+  preferences?: PlayerPreferences; // For future customization features
 }
 
 export interface ContractBid {

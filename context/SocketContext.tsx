@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { GameState, Card, Suit } from '../types/types';
 import { useAuth } from './AuthContext';
 
-const SERVER_URL = 'http://192.168.1.100:3000'; // <-- CHANGE THIS IP
+const SERVER_URL = 'http://192.168.10.128:3000';
 
 interface LobbyState { gameId: string; hostId: string; players: any[]; }
 
@@ -12,8 +12,10 @@ interface SocketContextType {
   gameState: GameState | null;
   lobbyState: LobbyState | null;
   error: string;
+  suggestion: Card | Suit | null;
   setGameState: (state: GameState | null) => void;
   setLobbyState: (state: LobbyState | null) => void;
+  clearSuggestion: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
@@ -30,6 +32,9 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [error, setError] = useState('');
+  const [suggestion, setSuggestion] = useState<Card | Suit | null>(null);
+
+  const clearSuggestion = () => setSuggestion(null);
 
   useEffect(() => {
     if (authState.authenticated && authState.token) {
@@ -38,12 +43,22 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       });
       setSocket(newSocket);
 
-      newSocket.on('lobbyUpdate', (data: LobbyState) => setLobbyState(data));
+      newSocket.on('lobbyUpdate', (data: LobbyState) => {
+        setError('');
+        setLobbyState(data);
+      });
       newSocket.on('gameUpdate', (data: GameState) => {
+        setError('');
         setLobbyState(null); // Clear lobby state when game starts
         setGameState(data);
       });
-      newSocket.on('error', (errorMessage: string) => setError(errorMessage));
+      newSocket.on('suggestion', (suggestedMove: Card | Suit | null) => {
+        setSuggestion(suggestedMove);
+      });
+      newSocket.on('error', (errorMessage: string) => {
+        console.error('Received server error:', errorMessage);
+        setError(errorMessage);
+      });
 
       return () => { newSocket.disconnect(); };
     } else {
@@ -52,7 +67,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [authState]);
 
-  const value = { socket, gameState, lobbyState, error, setGameState, setLobbyState };
+  const value = { socket, gameState, lobbyState, error, suggestion, setGameState, setLobbyState, clearSuggestion };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };

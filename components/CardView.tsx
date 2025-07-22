@@ -1,12 +1,14 @@
 import React from 'react';
-import { StyleSheet, Text,  Pressable } from 'react-native';
+import { StyleSheet, Text, Pressable } from 'react-native';
 import { Card } from '../types/types';
+import Animated from 'react-native-reanimated'; // <-- Import Animated
 
 interface CardViewProps {
   card: Card;
   onPress?: () => void;
   isPlayable?: boolean;
-  isSuggested?: boolean; // <-- Add new property
+  isSuggested?: boolean;
+  style?: any; // Allow passing animated styles
 }
 
 const suitSymbols: { [key: string]: { symbol: string; color: string } } = {
@@ -16,22 +18,26 @@ const suitSymbols: { [key: string]: { symbol: string; color: string } } = {
   Spades: { symbol: '♠', color: '#0f172a' },
 };
 
-export default function CardView({ card, onPress, isPlayable = true, isSuggested = false }: CardViewProps) {
+// We need to create an animatable version of Pressable
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+export default function CardView({ card, onPress, isPlayable = true, isSuggested = false, style }: CardViewProps) {
   const { symbol, color } = suitSymbols[card.suit];
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
       style={[
         styles.card,
         !isPlayable && styles.unplayableCard,
-        isSuggested && styles.suggestedCard, // <-- Apply suggestion style
+        isSuggested && styles.suggestedCard,
+        style, // <-- Apply animated styles here
       ]}
       disabled={!isPlayable}
     >
       <Text style={[styles.rank, { color }]}>{card.rank}</Text>
       <Text style={[styles.suit, { color }]}>{symbol}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -41,7 +47,7 @@ const styles = StyleSheet.create({
     height: 100,
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    borderWidth: 2, // Increased border width
+    borderWidth: 2,
     borderColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
@@ -57,7 +63,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
   },
   suggestedCard: {
-    borderColor: '#22c55e', // Green border for suggested card
+    borderColor: '#22c55e',
     shadowColor: '#22c55e',
     shadowOpacity: 0.8,
     shadowRadius: 10,

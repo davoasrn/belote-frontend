@@ -28,7 +28,19 @@ export default function LobbyScreen() {
     }
   };
 
-  const isHost = authState?.token && JSON.parse(atob(authState.token.split('.')[1])).sub === lobbyState?.hostId;
+  // A helper to safely decode the JWT and get the user ID
+  const getUserIdFromToken = (token: string | null): string | null => {
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub; // 'sub' is the standard claim for subject (user ID)
+    } catch (e) {
+      console.error("Failed to decode token:", e);
+      return null;
+    }
+  };
+
+  const isHost = getUserIdFromToken(authState.token) === lobbyState?.hostId;
 
   if (!lobbyState) {
     return <ActivityIndicator size="large" style={styles.container} />;
@@ -46,7 +58,7 @@ export default function LobbyScreen() {
         <Text style={styles.playerListTitle}>Players ({lobbyState.players.length}/4)</Text>
         {lobbyState.players.map((player) => (
           <View key={player.id} style={styles.playerRow}>
-            <Text style={styles.playerName}>{player.name} {player.id === lobbyState.hostId && '👑'}</Text>
+            <Text style={styles.playerName}>{player.name} {player.id === lobbyState.hostId ? '👑' : ''}</Text>
           </View>
         ))}
         {Array.from({ length: 4 - lobbyState.players.length }).map((_, i) => (

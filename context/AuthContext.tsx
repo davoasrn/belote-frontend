@@ -1,61 +1,83 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { PlayerPreferences } from '../types/types';
 
-// --- ⚠️ IMPORTANT ACTION REQUIRED ⚠️ ---
-// This must be the same IP address as in your SocketContext
-const API_URL = 'http://192.168.10.57:3000/auth'; // <-- CHANGE THIS IP
+const API_URL = 'http://192.168.10.128:3000';
+
+interface AuthState {
+  token: string | null;
+  authenticated: boolean;
+  preferences: PlayerPreferences;
+}
 
 interface AuthContextType {
-  authState: { token: string | null; authenticated: boolean };
-  register: (username: any, password: any) => Promise<any>;
-  login: (username: any, password: any) => Promise<any>;
+  authState: AuthState;
+  register: (username: string, password: string) => Promise<any>;
+  login: (username: string, password: string) => Promise<any>;
   logout: () => void;
+  updatePreferences: (prefs: PlayerPreferences) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [authState, setAuthState] = useState<{ token: string | null; authenticated: boolean }>({
+  const [authState, setAuthState] = useState<AuthState>({
     token: null,
     authenticated: false,
+    preferences: {},
   });
 
   useEffect(() => {
-    // Check if a token is stored on the device when the app loads
-    const loadToken = async () => {
+    const loadUser = async () => {
       const token = await SecureStore.getItemAsync('authToken');
       if (token) {
-        setAuthState({ token, authenticated: true });
+        try {
+          // The backend needs to be updated to return preferences on the profile endpoint.
+          // This is a placeholder for that functionality.
+          const result = await axios.get(`${API_URL}/auth/profile`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          // Assuming the profile endpoint will return a user object with a preferences key
+          setAuthState({ token, authenticated: true, preferences: result.data.preferences || {} });
+        } catch (e) {
+          logout(); // Token is invalid or expired
+        }
       }
     };
-    loadToken();
+    loadUser();
   }, []);
 
-  const register = async (username: string, password: string) => {
+  const login = async (username: string, password: string) => {
     try {
-      return await axios.post(`${API_URL}/register`, { username, password });
+      const result = await axios.post(`${API_URL}/auth/login`, { username, password });
+      const token = result.data.access_token;
+      await SecureStore.setItemAsync('authToken', token);
+      
+      // After login, fetch profile to get preferences
+      const profileResult = await axios.get(`${API_URL}/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setAuthState({ token, authenticated: true, preferences: profileResult.data.preferences || {} });
+      return result;
     } catch (e) {
       return { error: true, msg: (e as any).response.data.message };
     }
   };
 
-  const login = async (username: string, password: string) => {
+  const updatePreferences = async (prefs: PlayerPreferences) => {
     try {
-      const result = await axios.post(`${API_URL}/login`, { username, password });
-      setAuthState({
-        token: result.data.access_token,
-        authenticated: true,
+      const result = await axios.patch(`${API_URL}/user/preferences`, prefs, {
+        headers: { Authorization: `Bearer ${authState.token}` },
       });
-      await SecureStore.setItemAsync('authToken', result.data.access_token);
+      setAuthState(prev => ({ ...prev, preferences: result.data.preferences }));
       return result;
     } catch (e) {
       return { error: true, msg: (e as any).response.data.message };
@@ -64,15 +86,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     await SecureStore.deleteItemAsync('authToken');
-    setAuthState({ token: null, authenticated: false });
+    setAuthState({ token: null, authenticated: false, preferences: {} });
   };
 
-  const value = {
-    authState,
-    register,
-    login,
-    logout,
+  const register = async (username: string, password: string) => {
+    try {
+      return await axios.post(`${API_URL}/auth/register`, { username, password });
+    } catch (e) {
+      return { error: true, msg: (e as any).response.data.message };
+    }
   };
+
+  const value = { authState, register, login, logout, updatePreferences };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
