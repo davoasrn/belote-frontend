@@ -3,10 +3,9 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { SocketProvider } from '../context/SocketContext';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuthStore } from '../store/authStore';
-import { useShallow } from 'zustand/react/shallow'; // <-- 1. Import useShallow
+import { useShallow } from 'zustand/react/shallow';
 
 function RootLayoutNav() {
-  // 2. Use useShallow to prevent unnecessary re-renders
   const { isAuthenticated, isLoading } = useAuthStore(
     useShallow((state) => ({
       isAuthenticated: state.isAuthenticated,
@@ -24,15 +23,12 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'register';
 
-    // Only navigate if there is a mismatch between auth state and current location
     if (isAuthenticated && inAuthGroup) {
-      // User is logged in but still on an auth screen, so redirect
       router.replace('/(tabs)');
     } else if (!isAuthenticated && !inAuthGroup) {
-      // User is not logged in and is trying to access a protected screen, so redirect
       router.replace('/login');
     }
-  }, [isAuthenticated, isLoading, segments.join(',')]); // <-- Stabilize the dependency by converting array to string
+  }, [isAuthenticated, isLoading, segments.join(',')]);
 
   if (isLoading) {
     return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>;
@@ -44,6 +40,14 @@ function RootLayoutNav() {
       <Stack.Screen name="register" options={{ title: 'Create Account' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="[gameId]" options={{ title: 'Game Board' }} />
+      {/* Add this new screen configuration for the lobby */}
+      <Stack.Screen 
+        name="lobby/[gameId]" 
+        options={{ 
+          title: 'Game Lobby',
+          headerBackTitle: 'Home', // Makes the back button cleaner
+        }} 
+      />
     </Stack>
   );
 }
