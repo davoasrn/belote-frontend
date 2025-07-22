@@ -9,6 +9,7 @@ interface AuthState {
   token: string | null;
   authenticated: boolean;
   preferences: PlayerPreferences;
+  isLoading: boolean; // <-- Add loading state
 }
 
 interface AuthContextType {
@@ -32,6 +33,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     token: null,
     authenticated: false,
     preferences: {},
+    isLoading: true, // <-- Start in a loading state
   });
 
   useEffect(() => {
@@ -39,16 +41,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const token = await SecureStore.getItemAsync('authToken');
       if (token) {
         try {
-          // The backend needs to be updated to return preferences on the profile endpoint.
-          // This is a placeholder for that functionality.
           const result = await axios.get(`${API_URL}/auth/profile`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          // Assuming the profile endpoint will return a user object with a preferences key
-          setAuthState({ token, authenticated: true, preferences: result.data.preferences || {} });
+          setAuthState({ token, authenticated: true, preferences: result.data.preferences || {}, isLoading: false });
         } catch (e) {
-          logout(); // Token is invalid or expired
+          // Token is invalid, treat as logged out
+          setAuthState({ token: null, authenticated: false, preferences: {}, isLoading: false });
         }
+      } else {
+        // No token found, not logged in
+        setAuthState({ token: null, authenticated: false, preferences: {}, isLoading: false });
       }
     };
     loadUser();
@@ -60,12 +63,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const token = result.data.access_token;
       await SecureStore.setItemAsync('authToken', token);
       
-      // After login, fetch profile to get preferences
       const profileResult = await axios.get(`${API_URL}/auth/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setAuthState({ token, authenticated: true, preferences: profileResult.data.preferences || {} });
+      setAuthState({ token, authenticated: true, preferences: profileResult.data.preferences || {}, isLoading: false });
       return result;
     } catch (e) {
       return { error: true, msg: (e as any).response.data.message };
@@ -86,7 +88,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     await SecureStore.deleteItemAsync('authToken');
-    setAuthState({ token: null, authenticated: false, preferences: {} });
+    setAuthState({ token: null, authenticated: false, preferences: {}, isLoading: false });
   };
 
   const register = async (username: string, password: string) => {

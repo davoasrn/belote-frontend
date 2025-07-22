@@ -1,24 +1,24 @@
 import React from 'react';
 import { StyleSheet, Text, Pressable } from 'react-native';
 import { Card } from '../types/types';
-import Animated from 'react-native-reanimated'; // <-- Import Animated
+import Animated from 'react-native-reanimated';
+import Colors from '../constants/Colors';
 
 interface CardViewProps {
   card: Card;
   onPress?: () => void;
   isPlayable?: boolean;
   isSuggested?: boolean;
-  style?: any; // Allow passing animated styles
+  style?: any;
 }
 
 const suitSymbols: { [key: string]: { symbol: string; color: string } } = {
-  Hearts: { symbol: '♥', color: '#ef4444' },
-  Diamonds: { symbol: '♦', color: '#ef4444' },
-  Clubs: { symbol: '♣', color: '#0f172a' },
-  Spades: { symbol: '♠', color: '#0f172a' },
+  Hearts: { symbol: '♥', color: Colors.light.cardRed },
+  Diamonds: { symbol: '♦', color: Colors.light.cardRed },
+  Clubs: { symbol: '♣', color: Colors.light.cardText },
+  Spades: { symbol: '♠', color: Colors.light.cardText },
 };
 
-// We need to create an animatable version of Pressable
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function CardView({ card, onPress, isPlayable = true, isSuggested = false, style }: CardViewProps) {
@@ -31,7 +31,7 @@ export default function CardView({ card, onPress, isPlayable = true, isSuggested
         styles.card,
         !isPlayable && styles.unplayableCard,
         isSuggested && styles.suggestedCard,
-        style, // <-- Apply animated styles here
+        style,
       ]}
       disabled={!isPlayable}
     >
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   card: {
     width: 70,
     height: 100,
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.light.white,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#cbd5e1',
@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
   },
   suggestedCard: {
-    borderColor: '#22c55e',
-    shadowColor: '#22c55e',
+    borderColor: Colors.light.accent,
+    shadowColor: Colors.light.accent,
     shadowOpacity: 0.8,
     shadowRadius: 10,
     elevation: 10,
