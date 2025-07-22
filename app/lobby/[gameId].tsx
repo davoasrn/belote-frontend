@@ -2,12 +2,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Button, ActivityIndicator, Share, Pressable } from 'react-native';
 import { useSocket } from '../../context/SocketContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuthStore } from '../../store/authStore';
 
 export default function LobbyScreen() {
   const { gameId } = useLocalSearchParams();
   const { socket, lobbyState, gameState } = useSocket();
-  const { authState } = useAuth();
+  const token = useAuthStore((state) => state.token);
   const router = useRouter();
 
   useEffect(() => {
@@ -16,7 +16,7 @@ export default function LobbyScreen() {
     if (gameState && gameState.gameId === gameId) {
         router.replace(`/${gameId}`);
     }
-  }, [gameState]);
+  }, [gameState, gameId, router]);
 
   const onShare = async () => {
     try {
@@ -29,10 +29,11 @@ export default function LobbyScreen() {
   };
 
   // A helper to safely decode the JWT and get the user ID
-  const getUserIdFromToken = (token: string | null): string | null => {
-    if (!token) return null;
+  const getUserIdFromToken = (authToken: string | null): string | null => {
+    if (!authToken) return null;
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      // Basic JWT decode (for client-side display only, not for security)
+      const payload = JSON.parse(atob(authToken.split('.')[1]));
       return payload.sub; // 'sub' is the standard claim for subject (user ID)
     } catch (e) {
       console.error("Failed to decode token:", e);
@@ -40,7 +41,7 @@ export default function LobbyScreen() {
     }
   };
 
-  const isHost = getUserIdFromToken(authState.token) === lobbyState?.hostId;
+  const isHost = getUserIdFromToken(token) === lobbyState?.hostId;
 
   if (!lobbyState) {
     return <ActivityIndicator size="large" style={styles.container} />;
@@ -62,7 +63,7 @@ export default function LobbyScreen() {
           </View>
         ))}
         {Array.from({ length: 4 - lobbyState.players.length }).map((_, i) => (
-            <View key={i} style={[styles.playerRow, styles.emptySlot]}>
+            <View key={`empty-${i}`} style={[styles.playerRow, styles.emptySlot]}>
                 <Text style={styles.emptySlotText}>Waiting for player...</Text>
             </View>
         ))}

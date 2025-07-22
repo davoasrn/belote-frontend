@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { PlayerPreferences } from '../types/types';
 
-const API_URL = 'http://192.168.10.128:3000'; // <-- Ensure this IP is correct
+const API_URL = 'http://192.168.10.128:3000';
 
 interface AuthState {
   token: string | null;

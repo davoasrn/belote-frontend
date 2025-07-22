@@ -1,25 +1,25 @@
 // app/login.tsx
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text, Pressable, Image } from 'react-native';
-import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'expo-router';
 import Colors from '../constants/Colors';
+import { useAuthStore } from '../store/authStore'; // <-- Import the new store
 
-// Use import for static assets
-// import logo from '../assets/images/logo.png';
+// Make sure the path to your logo is correct
+// import logo from '../assets/images/logo.jpg';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const login = useAuthStore((state) => state.login); // <-- Get the login function from the store
   const router = useRouter();
 
   const onLoginPress = async () => {
     setError('');
     const result = await login(username, password);
     if (result && result.error) {
-      setError(result.msg);
+      setError(result.msg as string);
     }
   };
 
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     height: 150,
     alignSelf: 'center',
     marginBottom: 20,
-    borderRadius: 20, // Soften the edges
+    borderRadius: 20,
   },
   title: {
     fontSize: 28,
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   linkText: {
-    color: '#1d4ed8', // Standard link blue for better UX
+    color: '#1d4ed8',
     textAlign: 'center',
     marginTop: 20,
   },

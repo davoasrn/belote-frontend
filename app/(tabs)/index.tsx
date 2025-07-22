@@ -1,3 +1,4 @@
+// app/(tabs)/index.tsx
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Button, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
@@ -5,7 +6,8 @@ import { useSocket } from '../../context/SocketContext';
 
 export default function HomeScreen() {
   const [lobbyId, setLobbyId] = useState('');
-  const { socket, error, lobbyState, setLobbyState, setGameState } = useSocket();
+  // Use the new isConnected state from the context
+  const { socket, error, lobbyState, setLobbyState, setGameState, isConnected } = useSocket();
   const router = useRouter();
 
   useEffect(() => {
@@ -37,8 +39,12 @@ export default function HomeScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Bazar Belote</Text>
         
-        {!socket?.connected ? (
-          <ActivityIndicator size="large" color="#1d4ed8" />
+        {/* Use the isConnected flag to control the loading indicator */}
+        {!isConnected ? (
+          <View>
+            <ActivityIndicator size="large" color="#1d4ed8" />
+            <Text style={styles.connectingText}>Connecting...</Text>
+          </View>
         ) : (
           <>
             <Button
@@ -76,4 +82,5 @@ const styles = StyleSheet.create({
   divider: { fontSize: 16, color: '#64748b', marginVertical: 24 },
   input: { height: 50, width: '90%', borderColor: '#94a3b8', borderWidth: 1, borderRadius: 8, paddingHorizontal: 15, marginBottom: 12, fontSize: 16, textAlign: 'center', color: '#0f172a', backgroundColor: '#fff' },
   errorText: { color: '#ef4444', textAlign: 'center', marginTop: 20, fontSize: 16 },
+  connectingText: { marginTop: 10, color: '#64748b', fontStyle: 'italic' },
 });

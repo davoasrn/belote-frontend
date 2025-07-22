@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { GameState, Card, Suit } from '../types/types';
-import { useAuth } from './AuthContext';
+import { useAuthStore } from '../store/authStore';
 
 const SERVER_URL = 'http://192.168.10.128:3000';
 
@@ -9,6 +9,7 @@ interface LobbyState { gameId: string; hostId: string; players: any[]; }
 
 interface SocketContextType {
   socket: Socket | null;
+  isConnected: boolean; // <-- Add connection status
   gameState: GameState | null;
   lobbyState: LobbyState | null;
   error: string;
@@ -27,8 +28,9 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
-  const { authState } = useAuth();
+  const { isAuthenticated, token } = useAuthStore();
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false); // <-- New state for connection
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [error, setError] = useState('');
@@ -37,37 +39,47 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const clearSuggestion = () => setSuggestion(null);
 
   useEffect(() => {
-    if (authState.authenticated && authState.token) {
+    if (isAuthenticated && token) {
       const newSocket = io(SERVER_URL, {
-        extraHeaders: { Authorization: `Bearer ${authState.token}` },
+        extraHeaders: { Authorization: `Bearer ${token}` },
       });
       setSocket(newSocket);
 
-      newSocket.on('lobbyUpdate', (data: LobbyState) => {
+      newSocket.on('connect', () => {
+        console.log('✅ Socket connected successfully!');
+        setIsConnected(true);
         setError('');
-        setLobbyState(data);
       });
+      newSocket.on('disconnect', () => {
+        console.log('❌ Socket disconnected.');
+        setIsConnected(false);
+      });
+      newSocket.on('connect_error', (err) => {
+        console.error('❌ Socket connection error:', err.message);
+        setIsConnected(false);
+        setError('Failed to connect to the game server.');
+      });
+      
+      newSocket.on('lobbyUpdate', (data: LobbyState) => setLobbyState(data));
       newSocket.on('gameUpdate', (data: GameState) => {
-        setError('');
-        setLobbyState(null); // Clear lobby state when game starts
+        setLobbyState(null);
         setGameState(data);
+        setSuggestion(null);
       });
       newSocket.on('suggestion', (suggestedMove: Card | Suit | null) => {
         setSuggestion(suggestedMove);
       });
-      newSocket.on('error', (errorMessage: string) => {
-        console.error('Received server error:', errorMessage);
-        setError(errorMessage);
-      });
+      newSocket.on('error', (errorMessage: string) => setError(errorMessage));
 
       return () => { newSocket.disconnect(); };
     } else {
       socket?.disconnect();
       setSocket(null);
+      setIsConnected(false);
     }
-  }, [authState]);
+  }, [isAuthenticated, token]);
 
-  const value = { socket, gameState, lobbyState, error, suggestion, setGameState, setLobbyState, clearSuggestion };
+  const value = { socket, isConnected, gameState, lobbyState, error, suggestion, setGameState, setLobbyState, clearSuggestion };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };

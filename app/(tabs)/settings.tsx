@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, Button } from 'react-native';
-import { useAuth } from '../../context/AuthContext';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
+import { useAuthStore } from '../../store/authStore';
+import Colors from '../../constants/Colors';
+import { Ionicons } from '@expo/vector-icons';
 
 const THEME_OPTIONS = [
   { id: 'green_felt', name: 'Classic Green', color: '#059669' },
@@ -15,9 +17,9 @@ const CARD_BACK_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
-  const { authState, updatePreferences, logout } = useAuth();
-  const [selectedTheme, setSelectedTheme] = useState(authState.preferences?.tableTheme || 'green_felt');
-  const [selectedCardBack, setSelectedCardBack] = useState(authState.preferences?.cardBack || 'default_back');
+  const { preferences, updatePreferences, logout } = useAuthStore();
+  const [selectedTheme, setSelectedTheme] = useState(preferences?.tableTheme || 'green_felt');
+  const [selectedCardBack, setSelectedCardBack] = useState(preferences?.cardBack || 'default_back');
 
   const handleSave = async () => {
     const result = await updatePreferences({
@@ -33,7 +35,10 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.scrollView}
+      contentContainerStyle={styles.container}
+    >
       <Text style={styles.header}>Game Appearance</Text>
 
       <View style={styles.section}>
@@ -72,24 +77,88 @@ export default function SettingsScreen() {
         <Text style={styles.saveButtonText}>Save Preferences</Text>
       </Pressable>
       
-      <View style={styles.logoutButton}>
-        <Button title="Logout" onPress={logout} color="#dc2626" />
-      </View>
-    </View>
+      <Pressable style={styles.logoutButton} onPress={logout}>
+        <Ionicons name="log-out-outline" size={22} color={Colors.light.danger} />
+        <Text style={styles.logoutButtonText}>Logout</Text>
+      </Pressable>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f1f5f9' },
-  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 30, textAlign: 'center', color: '#1e293b' },
-  section: { marginBottom: 30 },
-  sectionTitle: { fontSize: 20, fontWeight: '600', marginBottom: 15, color: '#334155' },
+  scrollView: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  container: { 
+    padding: 20,
+    paddingBottom: 60, // Add extra space at the bottom
+  },
+  header: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 30, 
+    textAlign: 'center', 
+    color: Colors.light.text 
+  },
+  section: { 
+    marginBottom: 30 
+  },
+  sectionTitle: { 
+    fontSize: 20, 
+    fontWeight: '600', 
+    marginBottom: 15, 
+    color: '#334155' 
+  },
   optionsContainer: {},
-  option: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 10, borderWidth: 2, borderColor: 'transparent' },
-  selectedOption: { borderColor: '#2563eb' },
-  colorSwatch: { width: 24, height: 24, borderRadius: 12, marginRight: 15, borderWidth: 1, borderColor: '#e2e8f0' },
-  optionText: { fontSize: 16, color: '#1e293b' },
-  saveButton: { backgroundColor: '#16a34a', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 20 },
-  saveButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  logoutButton: { marginTop: 40 }
+  option: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: Colors.light.white, 
+    padding: 15, 
+    borderRadius: 8, 
+    marginBottom: 10, 
+    borderWidth: 2, 
+    borderColor: 'transparent' 
+  },
+  selectedOption: { 
+    borderColor: '#2563eb' 
+  },
+  colorSwatch: { 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    marginRight: 15, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0' 
+  },
+  optionText: { 
+    fontSize: 16, 
+    color: Colors.light.text 
+  },
+  saveButton: { 
+    backgroundColor: '#16a34a', 
+    padding: 15, 
+    borderRadius: 8, 
+    alignItems: 'center', 
+    marginTop: 20 
+  },
+  saveButtonText: { 
+    color: Colors.light.white, 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 40,
+    padding: 10,
+  },
+  logoutButtonText: {
+    color: Colors.light.danger,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  }
 });

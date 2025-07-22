@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, Pressable } from 'react-native';
 import { Card } from '../types/types';
-import Animated from 'react-native-reanimated';
+import Animated from 'react-native-reanimated'; // <-- Import Animated
 import Colors from '../constants/Colors';
 
 interface CardViewProps {
@@ -9,7 +9,7 @@ interface CardViewProps {
   onPress?: () => void;
   isPlayable?: boolean;
   isSuggested?: boolean;
-  style?: any;
+  style?: any; 
 }
 
 const suitSymbols: { [key: string]: { symbol: string; color: string } } = {
@@ -19,6 +19,7 @@ const suitSymbols: { [key: string]: { symbol: string; color: string } } = {
   Spades: { symbol: '♠', color: Colors.light.cardText },
 };
 
+// We need to create an animatable version of Pressable
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function CardView({ card, onPress, isPlayable = true, isSuggested = false, style }: CardViewProps) {
@@ -31,7 +32,7 @@ export default function CardView({ card, onPress, isPlayable = true, isSuggested
         styles.card,
         !isPlayable && styles.unplayableCard,
         isSuggested && styles.suggestedCard,
-        style,
+        style, // <-- Apply animated styles here
       ]}
       disabled={!isPlayable}
     >
