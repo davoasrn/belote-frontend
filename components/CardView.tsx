@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, Pressable } from 'react-native';
 import { Card } from '../types/types';
 import Animated from 'react-native-reanimated'; // <-- Import Animated
-import Colors from '../constants/Colors';
+import Colors from '@/constants/Colors';
 
 interface CardViewProps {
   card: Card;

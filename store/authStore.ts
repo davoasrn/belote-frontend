@@ -46,14 +46,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (username, password) => {
+    set({ isLoading: true });
     try {
       const result = await axios.post(`${API_URL}/auth/login`, { username, password });
       const token = result.data.access_token;
       await SecureStore.setItemAsync('authToken', token);
-      await get().checkAuth(); // Re-check auth to fetch preferences
+      
+      // Fetch profile immediately after login to get all user data
+      const profileResult = await axios.get(`${API_URL}/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      set({
+        isAuthenticated: true,
+        token,
+        preferences: profileResult.data.preferences || {},
+        isLoading: false,
+      });
       return {};
-    } catch (e) {
-      return { error: true, msg: (e as any).response.data.message };
+    } catch (err) {
+      set({ isLoading: false });
+      return { error: true, msg: (err as any).response?.data?.message || 'An error occurred' };
     }
   },
 

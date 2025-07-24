@@ -52,10 +52,16 @@ function RootLayoutNav() {
   );
 }
 
+import { AuthProvider } from '../context/AuthContext';
+
+// ... existing code ...
+
 export default function RootLayout() {
   return (
-    <SocketProvider>
-      <RootLayoutNav />
-    </SocketProvider>
+    <AuthProvider>
+      <SocketProvider>
+        <RootLayoutNav />
+      </SocketProvider>
+    </AuthProvider>
   );
 }

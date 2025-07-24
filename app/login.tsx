@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import Colors from '../constants/Colors';
+import Colors from '@/constants/Colors';
 import { useAuthStore } from '../store/authStore'; // <-- Import the new store
 
 // Make sure the path to your logo is correct

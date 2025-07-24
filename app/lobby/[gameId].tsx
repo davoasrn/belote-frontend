@@ -21,7 +21,8 @@ export default function LobbyScreen() {
   const onShare = async () => {
     try {
       await Share.share({
-        message: `Join my Belote game! Lobby ID: ${gameId}`,
+        message: `${gameId}`,
+        title: 'Belote Game Lobby ID'
       });
     } catch (error) {
       alert((error as Error).message);

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
-import Colors from '../constants/Colors';
+import Colors from '@/constants/Colors';
 
 export default function RegisterScreen() {
   const [username, setUsername] = useState('');
