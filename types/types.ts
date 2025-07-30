@@ -29,6 +29,7 @@ export interface Card {
 export interface PlayerPreferences {
   cardBack?: string;
   tableTheme?: string;
+  avatarUrl?: string; // URL or local path to user's avatar image
 }
 
 export enum CombinationType {

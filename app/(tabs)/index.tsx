@@ -1,4 +1,3 @@
-// app/(tabs)/index.tsx
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Button, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
@@ -6,12 +5,10 @@ import { useSocket } from '../../context/SocketContext';
 
 export default function HomeScreen() {
   const [lobbyId, setLobbyId] = useState('');
-  // Use the new isConnected state from the context
   const { socket, error, lobbyState, setLobbyState, setGameState, isConnected } = useSocket();
   const router = useRouter();
 
   useEffect(() => {
-    // When lobbyState is updated, it means we've successfully joined or created a lobby.
     if (lobbyState) {
       router.push(`/lobby/${lobbyState.gameId}`);
     }
@@ -39,7 +36,6 @@ export default function HomeScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Bazar Belote</Text>
         
-        {/* Use the isConnected flag to control the loading indicator */}
         {!isConnected ? (
           <View>
             <ActivityIndicator size="large" color="#1d4ed8" />

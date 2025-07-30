@@ -62,6 +62,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       
       newSocket.on('lobbyUpdate', (data: LobbyState) => setLobbyState(data));
       newSocket.on('gameUpdate', (data: GameState) => {
+        console.log('[gameUpdate] phase:', data.phase, 'currentTurnPlayerIndex:', data.currentTurnPlayerIndex, 'players:', data.players.map(p => ({id: p.id, name: p.name, isBot: p.isBot})));
         setLobbyState(null);
         setGameState(data);
         setSuggestion(null);

@@ -15,9 +15,14 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
+  const [isMounted, setIsMounted] = React.useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
     const isRouterReady = segments.length > 0;
-    if (isLoading || !isRouterReady) {
+    if (isLoading || !isRouterReady || !isMounted) {
       return;
     }
 
@@ -28,7 +33,7 @@ function RootLayoutNav() {
     } else if (!isAuthenticated && !inAuthGroup) {
       router.replace('/login');
     }
-  }, [isAuthenticated, isLoading, segments.join(',')]);
+  }, [isAuthenticated, isLoading, isMounted, segments.join(',')]);
 
   if (isLoading) {
     return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>;

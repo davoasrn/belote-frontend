@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, SafeAreaView, ScrollView, Button, LayoutAnimation, UIManager, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, SafeAreaView, ScrollView, Button, LayoutAnimation, UIManager, Platform, Image } from 'react-native';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { Card, GamePhase, Player, GameState, TrumpSuit, Suit } from '../types/types';
@@ -15,7 +15,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const TURN_DURATION_SECONDS = 30;
 
 const tableThemes: Record<string, string> = {
-  green_felt: '#059669',
+  green_felt: '#1A3C34',
   dark_wood: '#4a2c2a',
   blue_velvet: '#1e3a8a',
 };
@@ -36,20 +36,29 @@ const getLegalMoves = (player: Player, gameState: GameState): Card[] => {
     return hand;
 };
 
-const PlayerDisplay = ({ player, position, isCurrentTurn }: { player: Player; position: 'north' | 'south' | 'west' | 'east'; isCurrentTurn: boolean; }) => (
+const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, team }: {
+  player: Player;
+  position: 'north' | 'south' | 'west' | 'east';
+  isCurrentTurn: boolean;
+  avatarUrl?: string;
+  partner?: boolean;
+  team?: number;
+}) => (
   <View style={[styles.player, styles[position], isCurrentTurn && styles.currentPlayerTurn, player.disconnected && styles.disconnectedPlayer]}>
-    <Text style={styles.playerName}>{player.name}</Text>
-    {player.disconnected ? (
-        <Text style={styles.disconnectedText}>Disconnected</Text>
-    ) : (
-      <View style={styles.opponentHand}>
-        {position !== 'south' && Array.from({ length: player.hand.length }).map((_, index) => (
-          <View key={index} style={{ marginLeft: index > 0 ? -55 : 0 }}>
-            <CardBackView cardBackTheme={player.preferences?.cardBack as CardBackThemeID} />
-          </View>
-        ))}
+    {/* Avatar */}
+    {avatarUrl ? (
+      <View style={{ marginBottom: 4 }}>
+        <Image source={{ uri: avatarUrl }} style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: isCurrentTurn ? '#facc15' : '#fff' }} />
       </View>
+    ) : null}
+    <Text style={styles.playerName}>{player.name}</Text>
+    {team !== undefined && (
+      <Text style={{ color: team === 1 ? '#facc15' : '#60a5fa', fontWeight: 'bold', fontSize: 12 }}>
+        Team {team}
+        {partner ? ' (Partner)' : ''}
+      </Text>
     )}
+    {player.disconnected && <Text style={styles.disconnectedText}>Disconnected</Text>}
   </View>
 );
 
@@ -95,10 +104,22 @@ const BazarBiddingControls = ({ onBid, onPass, currentBid }: { onBid: (suit: Tru
 
 export default function GameScreen() {
   const router = useRouter();
+  
   const { socket, gameState, setGameState, suggestion, clearSuggestion } = useSocket();
   const { authState } = useAuth();
   const [timeLeft, setTimeLeft] = useState(TURN_DURATION_SECONDS);
   const timerRef = useRef<number | null>(null);
+
+  // Log local player and turn info for debugging
+  // React.useEffect(() => {
+  //   if (!gameState) return;
+  //   // Find the local player by matching userId or username from authState
+  //   const localPlayer = gameState.players.find(
+  //     p => p.id === authState.userId || p.name === authState.username
+  //   ) || gameState.players[0];
+  //   const currentTurnPlayer = gameState.players[gameState.currentTurnPlayerIndex];
+  //   console.log('[PlayerMapping] localPlayer:', authState,localPlayer?.id, localPlayer?.name, '| currentTurnPlayer:', currentTurnPlayer?.id, currentTurnPlayer?.name, '| currentTurnPlayerIndex:', gameState.currentTurnPlayerIndex);
+  // }, [gameState, authState.userId, authState.username]);
 
   useEffect(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
@@ -132,8 +153,8 @@ export default function GameScreen() {
   };
   const handleExitGame = () => {
     clearSuggestion();
-    router.back();
-    setTimeout(() => setGameState(null), 500);
+      router.back();
+      setTimeout(() => setGameState(null), 500);
   };
   const handleGetSuggestion = () => {
     if (socket && gameState) socket.emit('getSuggestion', { gameId: gameState.gameId });
@@ -144,12 +165,27 @@ export default function GameScreen() {
   }
 
   const tableThemeColor = tableThemes[authState.preferences?.tableTheme || 'green_felt'];
-  const humanPlayer = gameState.players[0];
-  const isHumanTurn = gameState.currentTurnPlayerIndex === 0;
+  const localPlayerIndex = gameState.players?.findIndex(
+    p => p.id === authState.userId || p.name === authState.username
+  );
+  const humanPlayer = gameState.players[localPlayerIndex] || gameState.players[0];
+  const isHumanTurn = gameState.currentTurnPlayerIndex === localPlayerIndex;
   const isBiddingPhase = gameState.phase === GamePhase.Bidding;
   const isPlayingPhase = gameState.phase === GamePhase.Playing;
   const isScoringPhase = gameState.phase === GamePhase.Scoring;
   const isFinishedPhase = gameState.phase === GamePhase.Finished;
+
+
+  // Always show local user as south, and map others clockwise
+  // seatOrder: [south, west, north, east] = [local, (local+1)%4, (local+2)%4, (local+3)%4]
+  const seatOrder = [0, 1, 2, 3].map(i => (localPlayerIndex + i) % 4);
+
+  // Avatar URL helper
+  const getAvatarUrl = (player: Player) => player.preferences?.avatarUrl || undefined;
+
+  // Team/partner logic: Team 1 = original player indices 0 & 2, Team 2 = 1 & 3
+  const getTeam = (playerIdx: number) => (playerIdx % 2 === 0 ? 1 : 2);
+  const isPartner = (playerIdx: number) => playerIdx !== localPlayerIndex && playerIdx % 2 === localPlayerIndex % 2;
 
   const legalMoves = isPlayingPhase && isHumanTurn ? getLegalMoves(humanPlayer, gameState) : [];
   const legalMoveSet = new Set(legalMoves.map(c => `${c.rank}-${c.suit}`));
@@ -160,11 +196,27 @@ export default function GameScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: tableThemeColor }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: tableThemeColor }]}> 
       <View style={styles.table}>
-        <PlayerDisplay player={gameState.players[2]} position="north" isCurrentTurn={gameState.currentTurnPlayerIndex === 2} />
+        {/* North */}
+        <PlayerDisplay
+          player={gameState.players[seatOrder[2]]}
+          position="north"
+          isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[2]}
+          avatarUrl={getAvatarUrl(gameState.players[seatOrder[2]])}
+          partner={isPartner(seatOrder[2])}
+          team={getTeam(seatOrder[2])}
+        />
         <View style={styles.middleRow}>
-          <PlayerDisplay player={gameState.players[3]} position="west" isCurrentTurn={gameState.currentTurnPlayerIndex === 3} />
+          {/* West */}
+          <PlayerDisplay
+            player={gameState.players[seatOrder[1]]}
+            position="west"
+            isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[1]}
+            avatarUrl={getAvatarUrl(gameState.players[seatOrder[1]])}
+            partner={isPartner(seatOrder[1])}
+            team={getTeam(seatOrder[1])}
+          />
           <View style={styles.trickArea}>
             {gameState.currentTrick.map(({ card }) => (
                 <View key={`${card.suit}-${card.rank}`} style={styles.trickCard}>
@@ -172,7 +224,15 @@ export default function GameScreen() {
                 </View>
             ))}
           </View>
-          <PlayerDisplay player={gameState.players[1]} position="east" isCurrentTurn={gameState.currentTurnPlayerIndex === 1} />
+          {/* East */}
+          <PlayerDisplay
+            player={gameState.players[seatOrder[3]]}
+            position="east"
+            isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[3]}
+            avatarUrl={getAvatarUrl(gameState.players[seatOrder[3]])}
+            partner={isPartner(seatOrder[3])}
+            team={getTeam(seatOrder[3])}
+          />
         </View>
         <View style={styles.southPlayerContainer}>
             {isHumanTurn && !isBiddingPhase && !isScoringPhase && !isFinishedPhase && <TurnTimer timeLeft={timeLeft} />}
@@ -188,7 +248,14 @@ export default function GameScreen() {
                 </View>
             )}
             {!isBiddingPhase && !isScoringPhase && !isFinishedPhase && (
-                 <PlayerDisplay player={humanPlayer} position="south" isCurrentTurn={isHumanTurn} />
+                 <PlayerDisplay
+                   player={humanPlayer}
+                   position="south"
+                   isCurrentTurn={isHumanTurn}
+                   avatarUrl={getAvatarUrl(humanPlayer)}
+                   partner={isPartner(localPlayerIndex)}
+                   team={getTeam(localPlayerIndex)}
+                 />
             )}
         </View>
       </View>

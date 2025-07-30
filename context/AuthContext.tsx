@@ -9,6 +9,8 @@ interface AuthState {
   token: string | null;
   authenticated: boolean;
   preferences: PlayerPreferences;
+  userId?: string;
+  username?: string;
   isLoading: boolean; // <-- Add loading state
 }
 
@@ -44,7 +46,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const result = await axios.get(`${API_URL}/auth/profile`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          setAuthState({ token, authenticated: true, preferences: result.data.preferences || {}, isLoading: false });
+          setAuthState({
+            token,
+            authenticated: true,
+            preferences: result.data.preferences || {},
+            userId: result.data.userId,
+            username: result.data.username,
+            isLoading: false
+          });
         } catch (e) {
           // Token is invalid, treat as logged out
           setAuthState({ token: null, authenticated: false, preferences: {}, isLoading: false });
@@ -67,7 +76,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setAuthState({ token, authenticated: true, preferences: profileResult.data.preferences || {}, isLoading: false });
+      setAuthState({
+        token,
+        authenticated: true,
+        preferences: profileResult.data.preferences || {},
+        userId: profileResult.data.userId,
+        username: profileResult.data.username,
+        isLoading: false
+      });
       return result;
     } catch (e) {
       return { error: true, msg: (e as any).response.data.message };

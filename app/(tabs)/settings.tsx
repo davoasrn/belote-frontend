@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, Image, Platform } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import Colors from '../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,16 +18,39 @@ const CARD_BACK_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
+
   const { preferences, updatePreferences, logout } = useAuthStore();
   const [selectedTheme, setSelectedTheme] = useState(preferences?.tableTheme || 'green_felt');
   const [selectedCardBack, setSelectedCardBack] = useState(preferences?.cardBack || 'default_back');
+  const [avatarUrl, setAvatarUrl] = useState(preferences?.avatarUrl || '');
+
+  const handlePickAvatar = async () => {
+    // Ask for permission
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Camera roll permissions are required to upload an avatar.');
+        return;
+      }
+    }
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setAvatarUrl(result.assets[0].uri);
+    }
+  };
+
 
   const handleSave = async () => {
     const result = await updatePreferences({
       tableTheme: selectedTheme,
       cardBack: selectedCardBack,
+      avatarUrl,
     });
-
     if (result && !result.error) {
       Alert.alert('Success', 'Your preferences have been saved.');
     } else {
@@ -40,6 +64,17 @@ export default function SettingsScreen() {
       contentContainerStyle={styles.container}
     >
       <Text style={styles.header}>Game Appearance</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Avatar</Text>
+        <Pressable style={styles.avatarPicker} onPress={handlePickAvatar}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarPlaceholder}><Text style={{ color: '#fff' }}>Pick Avatar</Text></View>
+          )}
+        </Pressable>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Table Theme</Text>
