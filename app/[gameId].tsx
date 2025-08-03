@@ -61,7 +61,7 @@ const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, te
     )}
     {player.disconnected && <Text style={styles.disconnectedText}>Disconnected</Text>}
     {/* Show card backs for other players */}
-    {!isLocal && player.hand && player.hand.length > 0 && (
+    {/* {!isLocal && player.hand && player.hand.length > 0 && (
       <View style={styles.opponentHand}>
         {player.hand.map((_, index) => (
           <View key={index} style={styles.cardBack}>
@@ -69,7 +69,7 @@ const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, te
           </View>
         ))}
       </View>
-    )}
+    )} */}
   </View>
 );
 
@@ -259,7 +259,11 @@ export default function GameScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: tableThemeColor }]}> 
+    <SafeAreaView style={[
+      styles.container, 
+      { backgroundColor: tableThemeColor },
+      Platform.OS === 'android' && { paddingBottom: 20 }
+    ]}> 
       <View style={styles.table}>
         {/* North */}
         <PlayerDisplay
@@ -389,8 +393,19 @@ const styles = StyleSheet.create({
   west: {},
   east: {},
   southPlayerContainer: { height: 120, justifyContent: 'center', alignItems: 'center', gap: 10 },
-  humanPlayerArea: { backgroundColor: 'rgba(0,0,0,0.2)', borderTopColor: 'rgba(255,255,255,0.2)', borderTopWidth: 1 },
-  handContainer: { paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center', height: 100 },
+  humanPlayerArea: { 
+    backgroundColor: 'rgba(0,0,0,0.2)', 
+    borderTopColor: 'rgba(255,255,255,0.2)', 
+    borderTopWidth: 1,
+    paddingBottom: Platform.OS === 'android' ? 15 : 5
+  },
+  handContainer: { 
+    paddingVertical: 8, 
+    paddingHorizontal: 10, 
+    alignItems: 'center', 
+    height: 100,
+    marginBottom: Platform.OS === 'android' ? 10 : 0
+  },
   infoBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.2)' },
   infoButtonContainer: { flex: 1, alignItems: 'center' },
   bidInfo: { flex: 2, alignItems: 'center' },
