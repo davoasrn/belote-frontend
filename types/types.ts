@@ -3,6 +3,7 @@ export enum Suit {
   Diamonds = 'Diamonds',
   Hearts = 'Hearts',
   Spades = 'Spades',
+  HIDDEN = 'HIDDEN', // For hidden cards
 }
 
 export type TrumpSuit = Suit | 'No-Trump';
@@ -16,6 +17,7 @@ export enum Rank {
   Queen = 'Q',
   King = 'K',
   Ace = 'A',
+  HIDDEN = 'HIDDEN', // For hidden cards
 }
 
 export interface Card {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 import { GameState, Card, Suit } from '../types/types';
 import { useAuthStore } from '../store/authStore';
@@ -46,12 +47,12 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       setSocket(newSocket);
 
       newSocket.on('connect', () => {
-        console.log('✅ Socket connected successfully!');
+        console.log(`✅ [${Platform.OS}] Socket connected successfully!`);
         setIsConnected(true);
         setError('');
       });
       newSocket.on('disconnect', () => {
-        console.log('❌ Socket disconnected.');
+        console.log(`❌ [${Platform.OS}] Socket disconnected.`);
         setIsConnected(false);
       });
       newSocket.on('connect_error', (err) => {
@@ -62,7 +63,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       
       newSocket.on('lobbyUpdate', (data: LobbyState) => setLobbyState(data));
       newSocket.on('gameUpdate', (data: GameState) => {
-        console.log('[gameUpdate] phase:', data.phase, 'currentTurnPlayerIndex:', data.currentTurnPlayerIndex, 'players:', data.players.map(p => ({id: p.id, name: p.name, isBot: p.isBot})));
+        console.log('[SOCKET-DEBUG] gameUpdate received - phase:', data.phase, 'currentTurnPlayerIndex:', data.currentTurnPlayerIndex, 'players:', data.players.map(p => ({id: p.id, name: p.name, isBot: p.isBot})));
         setLobbyState(null);
         setGameState(data);
         setSuggestion(null);

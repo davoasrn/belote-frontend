@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, SafeAreaView, ScrollView, Button, LayoutAnimation, UIManager, Platform, Image } from 'react-native';
+import { StyleSheet, Text, View, Pressable, SafeAreaView, ScrollView, Button, LayoutAnimation, UIManager, Platform, Image, TouchableOpacity, Alert } from 'react-native';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { Card, GamePhase, Player, GameState, TrumpSuit, Suit } from '../types/types';
 import CardView from '../components/CardView';
-import CardBackView, { CardBackThemeID } from '../components/CardBackView';
+import CardBackView from '../components/CardBackView';
 import TurnTimer from '../components/TurnTimer';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -36,13 +36,14 @@ const getLegalMoves = (player: Player, gameState: GameState): Card[] => {
     return hand;
 };
 
-const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, team }: {
+const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, team, isLocal }: {
   player: Player;
   position: 'north' | 'south' | 'west' | 'east';
   isCurrentTurn: boolean;
   avatarUrl?: string;
   partner?: boolean;
   team?: number;
+  isLocal?: boolean;
 }) => (
   <View style={[styles.player, styles[position], isCurrentTurn && styles.currentPlayerTurn, player.disconnected && styles.disconnectedPlayer]}>
     {/* Avatar */}
@@ -59,6 +60,16 @@ const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, te
       </Text>
     )}
     {player.disconnected && <Text style={styles.disconnectedText}>Disconnected</Text>}
+    {/* Show card backs for other players */}
+    {!isLocal && player.hand && player.hand.length > 0 && (
+      <View style={styles.opponentHand}>
+        {player.hand.map((_, index) => (
+          <View key={index} style={styles.cardBack}>
+            <CardBackView cardBackTheme="default_back" />
+          </View>
+        ))}
+      </View>
+    )}
   </View>
 );
 
@@ -67,6 +78,9 @@ const BazarBiddingControls = ({ onBid, onPass, currentBid }: { onBid: (suit: Tru
   const [selectedPoints, setSelectedPoints] = useState<number>(currentBid + 10);
   const bidOptions = Array.from({ length: 9 }, (_, i) => currentBid + 10 + i * 10);
 
+  // Valid trump suits for bidding (exclude HIDDEN)
+  const validTrumpSuits: TrumpSuit[] = [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades, 'No-Trump'];
+
   const handleBid = () => {
     if (selectedSuit && selectedPoints) {
       onBid(selectedSuit, selectedPoints);
@@ -74,11 +88,18 @@ const BazarBiddingControls = ({ onBid, onPass, currentBid }: { onBid: (suit: Tru
   };
 
   return (
-    <View style={styles.biddingContainer}>
+    <View style={styles.biddingControlsContainer}>
       <Text style={styles.biddingTitle}>Your Bid</Text>
       <View style={styles.bidSelectorRow}>
-        {(Object.values(Suit) as TrumpSuit[]).concat('No-Trump').map(suit => (
-          <Pressable key={suit} style={[styles.suitButton, selectedSuit === suit && styles.selectedButton]} onPress={() => setSelectedSuit(suit)}>
+        {validTrumpSuits.map(suit => (
+          <Pressable 
+            key={suit} 
+            style={[styles.suitButton, selectedSuit === suit && styles.selectedButton]} 
+            onPress={() => {
+              console.log('Suit selected:', suit);
+              setSelectedSuit(suit);
+            }}
+          >
             <Text style={styles.suitButtonText}>{suit === 'No-Trump' ? 'NT' : suit.charAt(0)}</Text>
           </Pressable>
         ))}
@@ -91,12 +112,35 @@ const BazarBiddingControls = ({ onBid, onPass, currentBid }: { onBid: (suit: Tru
         ))}
       </ScrollView>
       <View style={styles.actionButtonsRow}>
-        <Pressable style={[styles.actionButton, styles.passButton]} onPress={onPass}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.passButton]} 
+          onPress={() => {
+            console.log('Pass button pressed - TEST');
+            Alert.alert('Button Test', 'Pass button works!');
+            onPass();
+          }}
+          activeOpacity={0.7}
+        >
           <Text style={styles.actionButtonText}>Pass</Text>
-        </Pressable>
-        <Pressable style={[styles.actionButton, styles.bidButton]} onPress={handleBid} disabled={!selectedSuit}>
-          <Text style={styles.actionButtonText}>Bid</Text>
-        </Pressable>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[
+            styles.actionButton, 
+            styles.bidButton,
+            !selectedSuit && styles.disabledButton
+          ]} 
+          onPress={() => {
+            console.log('Bid button pressed - TEST, selectedSuit:', selectedSuit, 'selectedPoints:', selectedPoints);
+            Alert.alert('Button Test', `Bid button works! ${selectedSuit ? `${selectedPoints} ${selectedSuit}` : 'No suit selected'}`);
+            if (selectedSuit) {
+              handleBid();
+            }
+          }}
+          disabled={!selectedSuit}
+          activeOpacity={selectedSuit ? 0.7 : 0.3}
+        >
+          <Text style={[styles.actionButtonText, !selectedSuit && styles.disabledButtonText]}>Bid</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -109,6 +153,13 @@ export default function GameScreen() {
   const { authState } = useAuth();
   const [timeLeft, setTimeLeft] = useState(TURN_DURATION_SECONDS);
   const timerRef = useRef<number | null>(null);
+
+  // Debug: Log player identification
+  useEffect(() => {
+    if (gameState && authState.username) {
+      console.log(`[PLAYER-DEBUG] ${authState.username} - Game state updated. Current turn: ${gameState.players[gameState.currentTurnPlayerIndex]?.name}`);
+    }
+  }, [gameState, authState.username]);
 
   // Log local player and turn info for debugging
   // React.useEffect(() => {
@@ -143,9 +194,11 @@ export default function GameScreen() {
   }, [gameState?.currentTurnPlayerIndex, gameState?.players[0].id]);
 
   const handleMakeBid = (suit: TrumpSuit, points: number) => {
+    console.log(`[BID-DEBUG] ${authState.username} making bid: ${points} ${suit}`);
     if (socket && gameState) socket.emit('makeBid', { gameId: gameState.gameId, suit, points });
   };
   const handlePassBid = () => {
+    console.log(`[BID-DEBUG] ${authState.username} passing bid`);
      if (socket && gameState) socket.emit('passBid', { gameId: gameState.gameId });
   };
   const handlePlayCard = (card: Card) => {
@@ -168,8 +221,18 @@ export default function GameScreen() {
   const localPlayerIndex = gameState.players?.findIndex(
     p => p.id === authState.userId || p.name === authState.username
   );
+  
+  // Debug player identification
+  console.log('[PLAYER-ID-DEBUG]', {
+    authUserId: authState.userId,
+    authUsername: authState.username,
+    localPlayerIndex,
+    currentTurnPlayerIndex: gameState.currentTurnPlayerIndex,
+    players: gameState.players.map(p => ({ id: p.id, name: p.name }))
+  });
+  
   const humanPlayer = gameState.players[localPlayerIndex] || gameState.players[0];
-  const isHumanTurn = gameState.currentTurnPlayerIndex === localPlayerIndex;
+  const isHumanTurn = localPlayerIndex >= 0 && gameState.currentTurnPlayerIndex === localPlayerIndex;
   const isBiddingPhase = gameState.phase === GamePhase.Bidding;
   const isPlayingPhase = gameState.phase === GamePhase.Playing;
   const isScoringPhase = gameState.phase === GamePhase.Scoring;
@@ -206,6 +269,7 @@ export default function GameScreen() {
           avatarUrl={getAvatarUrl(gameState.players[seatOrder[2]])}
           partner={isPartner(seatOrder[2])}
           team={getTeam(seatOrder[2])}
+          isLocal={false}
         />
         <View style={styles.middleRow}>
           {/* West */}
@@ -216,6 +280,7 @@ export default function GameScreen() {
             avatarUrl={getAvatarUrl(gameState.players[seatOrder[1]])}
             partner={isPartner(seatOrder[1])}
             team={getTeam(seatOrder[1])}
+            isLocal={false}
           />
           <View style={styles.trickArea}>
             {gameState.currentTrick.map(({ card }) => (
@@ -232,6 +297,7 @@ export default function GameScreen() {
             avatarUrl={getAvatarUrl(gameState.players[seatOrder[3]])}
             partner={isPartner(seatOrder[3])}
             team={getTeam(seatOrder[3])}
+            isLocal={false}
           />
         </View>
         <View style={styles.southPlayerContainer}>
@@ -255,6 +321,7 @@ export default function GameScreen() {
                    avatarUrl={getAvatarUrl(humanPlayer)}
                    partner={isPartner(localPlayerIndex)}
                    team={getTeam(localPlayerIndex)}
+                   isLocal={true}
                  />
             )}
         </View>
@@ -274,20 +341,30 @@ export default function GameScreen() {
             </View>
         </View>
         
-        {isBiddingPhase && isHumanTurn ? (
-          <BazarBiddingControls onBid={handleMakeBid} onPass={handlePassBid} currentBid={gameState.winningBid?.points || 80} />
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handContainer}>
-            {humanPlayer.hand.map((card) => (
-              <CardView 
-                  key={`${card.suit}-${card.rank}`} 
-                  card={card} 
-                  onPress={() => handlePlayCard(card)}
-                  isPlayable={!isPlayingPhase || !isHumanTurn || legalMoveSet.has(`${card.rank}-${card.suit}`)}
-                  isSuggested={isCardSuggested(card)}
-              />
-            ))}
-          </ScrollView>
+        {/* Always show player's hand */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handContainer}>
+          {humanPlayer.hand.filter(card => card.suit !== Suit.HIDDEN).map((card) => (
+            <CardView 
+                key={`${card.suit}-${card.rank}`} 
+                card={card} 
+                onPress={isBiddingPhase ? undefined : () => handlePlayCard(card)}
+                isPlayable={!isBiddingPhase && (!isPlayingPhase || !isHumanTurn || legalMoveSet.has(`${card.rank}-${card.suit}`))}
+                isSuggested={!isBiddingPhase && isCardSuggested(card)}
+            />
+          ))}
+        </ScrollView>
+        
+        {/* Show bidding controls during bidding phase */}
+        {isBiddingPhase && (
+          <View style={styles.biddingContainer}>
+            {isHumanTurn ? (
+              <BazarBiddingControls onBid={handleMakeBid} onPass={handlePassBid} currentBid={gameState.winningBid?.points || 80} />
+            ) : (
+              <View style={styles.waitingContainer}>
+                <Text style={styles.waitingText}>Waiting for {gameState.players[gameState.currentTurnPlayerIndex].name} to bid...</Text>
+              </View>
+            )}
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -306,34 +383,81 @@ const styles = StyleSheet.create({
   disconnectedText: { color: '#f9fafb', fontWeight: 'bold', fontSize: 12 },
   playerName: { fontWeight: 'bold', color: '#fff', fontSize: 14 },
   playerInfo: { fontSize: 12, color: '#fff', marginTop: 4, height: 15 },
-  opponentHand: { flexDirection: 'row', marginTop: 4, height: 15, minWidth: 70 },
+  opponentHand: { flexDirection: 'row', marginTop: 4, height: 15, minWidth: 70, alignItems: 'center', justifyContent: 'center' },
   north: { alignSelf: 'center', marginBottom: 10 },
   south: { alignSelf: 'center', marginTop: 10 },
   west: {},
   east: {},
   southPlayerContainer: { height: 120, justifyContent: 'center', alignItems: 'center', gap: 10 },
   humanPlayerArea: { backgroundColor: 'rgba(0,0,0,0.2)', borderTopColor: 'rgba(255,255,255,0.2)', borderTopWidth: 1 },
-  handContainer: { paddingVertical: 15, paddingHorizontal: 10, alignItems: 'center', height: 130 },
+  handContainer: { paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center', height: 100 },
   infoBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.2)' },
   infoButtonContainer: { flex: 1, alignItems: 'center' },
   bidInfo: { flex: 2, alignItems: 'center' },
   infoText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
   scoreText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  biddingContainer: { paddingVertical: 10, alignItems: 'center', width: '100%', height: 130 },
-  biddingTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-  bidSelectorRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 10 },
-  suitButton: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+  biddingContainer: { 
+    paddingVertical: 15, 
+    alignItems: 'center', 
+    width: '100%', 
+    minHeight: 180, 
+    backgroundColor: 'rgba(0,0,0,0.3)', 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(255,255,255,0.2)' 
+  },
+  biddingControlsContainer: { 
+    alignItems: 'center', 
+    width: '100%', 
+    paddingHorizontal: 20,
+    gap: 10 
+  },
+  biddingTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
+  bidSelectorRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 8 },
+  suitButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
   selectedButton: { borderColor: '#facc15' },
-  suitButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  pointsScrollView: { width: '100%', marginBottom: 10 },
+  suitButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  pointsScrollView: { width: '100%', marginBottom: 8 },
   pointsButton: { width: 55, height: 35, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', borderRadius: 8, marginHorizontal: 4, borderWidth: 2, borderColor: 'transparent' },
   pointsButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  actionButtonsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '70%' },
-  actionButton: { paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
+  actionButtonsRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    width: '100%', 
+    paddingHorizontal: 20,
+    marginTop: 15,
+    zIndex: 1000, 
+    elevation: 1000
+  },
+  actionButton: { 
+    minWidth: 100,
+    marginHorizontal: 10,
+    paddingVertical: 15, 
+    paddingHorizontal: 25, 
+    borderRadius: 10, 
+    minHeight: 50, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8
+  },
   passButton: { backgroundColor: '#dc2626' },
   bidButton: { backgroundColor: '#16a34a' },
-  actionButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  disabledButton: { backgroundColor: '#6b7280', opacity: 0.5 },
+  actionButtonText: { 
+    color: '#fff', 
+    fontWeight: 'bold', 
+    fontSize: 16,
+    textAlign: 'center'
+  },
+  disabledButtonText: { color: '#d1d5db' },
   scoringBox: { padding: 20, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10, alignItems: 'center' },
   scoringTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 10 },
   gameOverText: { fontSize: 22, fontWeight: 'bold', color: '#facc15', marginBottom: 10 },
+  cardBack: { width: 15, height: 20, marginHorizontal: 1 },
+  waitingContainer: { justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+  waitingText: { color: '#fff', fontSize: 16, fontStyle: 'italic', textAlign: 'center' },
 });
