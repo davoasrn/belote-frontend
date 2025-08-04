@@ -1,5 +1,6 @@
 import { View, StyleSheet, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { router } from 'expo-router';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { Card, GamePhase, TrumpSuit, Suit } from '../types/types';
@@ -32,13 +33,31 @@ export default function GameScreen() {
   const localPlayerData = useMemo(() => {
     if (!gameState) return null;
     
-    const localPlayerIndex = gameState.players?.findIndex(
+    console.log(`[PLAYER-DEBUG] Finding local player - authState.userId: ${authState.userId}, authState.username: ${authState.username}`);
+    console.log(`[PLAYER-DEBUG] Available players:`, gameState.players?.map(p => ({ id: p.id, name: p.name })));
+    
+    let localPlayerIndex = gameState.players?.findIndex(
       p => p.id === authState.userId || p.name === authState.username
     );
     
+    // Fallback: if we can't find the player and we have a connected socket, 
+    // assume we're the first human player
+    if (localPlayerIndex < 0 && gameState.players) {
+      localPlayerIndex = gameState.players.findIndex(p => !p.isBot);
+      console.log(`[PLAYER-DEBUG] Using fallback - found first human player at index: ${localPlayerIndex}`);
+    }
+    
+    // Final fallback: assume index 0
+    if (localPlayerIndex < 0) {
+      localPlayerIndex = 0;
+      console.log(`[PLAYER-DEBUG] Using final fallback - index 0`);
+    }
+    
+    console.log(`[PLAYER-DEBUG] Final localPlayerIndex: ${localPlayerIndex}`);
+    
     return {
-      localPlayerIndex: localPlayerIndex >= 0 ? localPlayerIndex : 0,
-      humanPlayer: gameState.players[localPlayerIndex >= 0 ? localPlayerIndex : 0]
+      localPlayerIndex,
+      humanPlayer: gameState.players[localPlayerIndex]
     };
   }, [gameState, authState.userId, authState.username]);
 
@@ -77,25 +96,27 @@ export default function GameScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
   }, [trickLength, handLength, phase]);
 
-  // Timer effect - optimized with proper dependencies
-  useEffect(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+  // Helper function to calculate legal moves
+  const getLegalMoves = useCallback((player: any, gameState: any) => {
+    if (gameState.phase !== GamePhase.Playing || !gameState.trumpSuit) return player.hand;
     
-    if (gameState && localPlayerData && gamePhases.isHumanTurn) {
-      setTimeLeft(TURN_DURATION_SECONDS);
-      timerRef.current = setInterval(() => {
-        setTimeLeft(prevTime => (prevTime > 0 ? prevTime - 1 : 0));
-      }, 1000) as unknown as number;
-    }
+    const hand = player.hand;
+    const trick = gameState.currentTrick;
     
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [gameState, localPlayerData, gamePhases.isHumanTurn]);
+    if (trick.length === 0) return hand;
+    
+    const leadingCard = trick[0].card;
+    const leadingSuit = leadingCard.suit;
+    const trumpSuit = gameState.trumpSuit;
+    
+    const cardsInLeadingSuit = hand.filter((c: Card) => c.suit === leadingSuit);
+    if (cardsInLeadingSuit.length > 0) return cardsInLeadingSuit;
+    
+    const trumpCards = hand.filter((c: Card) => c.suit === trumpSuit);
+    if (trumpCards.length > 0) return trumpCards;
+    
+    return hand;
+  }, []);
 
   // Helper functions memoized to prevent recreations
   const getAvatarUrl = useCallback((player: any) => player.preferences?.avatarUrl || undefined, []);
@@ -129,8 +150,7 @@ export default function GameScreen() {
 
   const handleExitGame = useCallback(() => {
     clearSuggestion();
-    // Use router.back() equivalent - need to import from expo-router
-    // router.back();
+    router.back();
     setTimeout(() => setGameState(null), 500);
   }, [clearSuggestion, setGameState]);
 
@@ -139,6 +159,56 @@ export default function GameScreen() {
       socket.emit('getSuggestion', { gameId: gameState.gameId });
     }
   }, [socket, gameState]);
+
+  // Timer effect - simplified with stable dependencies
+  useEffect(() => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    // Only start timer if it's actually the human player's turn AND in playing phase
+    const shouldStartTimer = gameState && 
+                            localPlayerData && 
+                            gameState.phase === GamePhase.Playing &&
+                            gameState.currentTurnPlayerIndex === localPlayerData.localPlayerIndex;
+    
+    if (shouldStartTimer) {
+      console.log(`[TIMER-DEBUG] Starting timer for ${authState.username || 'unknown'} - currentTurnPlayerIndex: ${gameState.currentTurnPlayerIndex}, localPlayerIndex: ${localPlayerData.localPlayerIndex}`);
+      setTimeLeft(TURN_DURATION_SECONDS);
+      
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prevTime => {
+          if (prevTime <= 1) {
+            // Timer expired - auto-play a random legal card
+            if (localPlayerData && gameState) {
+              const { humanPlayer } = localPlayerData;
+              const legalMoves = getLegalMoves(humanPlayer, gameState);
+              if (legalMoves.length > 0) {
+                const randomCard = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+                console.log(`[AUTO-PLAY] ${authState.username || 'unknown'} auto-playing card due to timeout:`, randomCard);
+                handlePlayCard(randomCard);
+              }
+            }
+            return 0;
+          }
+          return prevTime - 1;
+        });
+      }, 1000) as unknown as number;
+    } else {
+      console.log(`[TIMER-DEBUG] Not starting timer for ${authState.username || 'unknown'} - phase: ${gameState?.phase}, currentTurnPlayerIndex: ${gameState?.currentTurnPlayerIndex}, localPlayerIndex: ${localPlayerData?.localPlayerIndex}`);
+      // Reset timer display when it's not human's turn
+      setTimeLeft(TURN_DURATION_SECONDS);
+    }
+    
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [gameState?.currentTurnPlayerIndex, gameState?.phase, localPlayerData?.localPlayerIndex, authState.username, getLegalMoves, handlePlayCard, gameState, localPlayerData]);
 
   if (!gameState || !localPlayerData) {
     return (
@@ -205,7 +275,7 @@ export default function GameScreen() {
           isBiddingPhase={isBiddingPhase}
           isPlayingPhase={isPlayingPhase}
           isHumanTurn={isHumanTurn}
-          legalMoveSet={new Set()} // Will need to calculate legal moves
+          legalMoveSet={new Set(getLegalMoves(humanPlayer, gameState).map((c: Card) => `${c.rank}-${c.suit}`))}
           isCardSuggested={(card: Card) => {
             if (!suggestion || typeof suggestion === 'string') return false;
             return suggestion.rank === card.rank && suggestion.suit === card.suit;

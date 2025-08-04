@@ -31,16 +31,21 @@ const PlayerHand = React.memo<PlayerHandProps>(({
   // Memoize card components to prevent recreation
   const cardComponents = React.useMemo(() => 
     visibleCards.map((card) => {
-      const cardKey = `${card.suit}-${card.rank}`;
+      const cardKey = `${card.rank}-${card.suit}`;
+      
+      // Card is playable if:
+      // 1. Not in bidding phase AND
+      // 2. Either not in playing phase OR (it's human's turn AND card is legal move)
       const isPlayable = !isBiddingPhase && 
-        (!isPlayingPhase || !isHumanTurn || legalMoveSet.has(cardKey));
+        (!isPlayingPhase || (isHumanTurn && legalMoveSet.has(cardKey)));
+      
       const isSuggested = !isBiddingPhase && isCardSuggested(card);
       
       return (
         <CardView 
           key={cardKey}
           card={card} 
-          onPress={isBiddingPhase ? undefined : () => onPlayCard(card)}
+          onPress={isPlayable ? () => onPlayCard(card) : undefined}
           isPlayable={isPlayable}
           isSuggested={isSuggested}
         />
