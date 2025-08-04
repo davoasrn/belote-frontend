@@ -1,12 +1,14 @@
-import { useRouter } from 'expo-router';
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, SafeAreaView, ScrollView, Button, LayoutAnimation, UIManager, Platform, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Card, GamePhase, Player, GameState, TrumpSuit, Suit } from '../types/types';
-import CardView from '../components/CardView';
-import CardBackView from '../components/CardBackView';
-import TurnTimer from '../components/TurnTimer';
+import { Card, GamePhase, TrumpSuit, Suit } from '../types/types';
+import GameTable from '../components/game/GameTable';
+import TrickArea from '../components/game/TrickArea';
+import GameStatus from '../components/game/GameStatus';
+import GameInfo from '../components/game/GameInfo';
+import PlayerHand from '../components/game/PlayerHand';
+import BiddingControls from '../components/game/BiddingControls';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -20,352 +22,209 @@ const tableThemes: Record<string, string> = {
   blue_velvet: '#1e3a8a',
 };
 
-// Helper function to determine legal moves
-const getLegalMoves = (player: Player, gameState: GameState): Card[] => {
-    if (gameState.phase !== GamePhase.Playing || !gameState.trumpSuit) return player.hand;
-    const hand = player.hand;
-    const trick = gameState.currentTrick;
-    if (trick.length === 0) return hand;
-    const leadingCard = trick[0].card;
-    const leadingSuit = leadingCard.suit;
-    const trumpSuit = gameState.trumpSuit;
-    const cardsInLeadingSuit = hand.filter(c => c.suit === leadingSuit);
-    if (cardsInLeadingSuit.length > 0) return cardsInLeadingSuit;
-    const trumpCards = hand.filter(c => c.suit === trumpSuit);
-    if (trumpCards.length > 0) return trumpCards;
-    return hand;
-};
-
-const PlayerDisplay = ({ player, position, isCurrentTurn, avatarUrl, partner, team, isLocal }: {
-  player: Player;
-  position: 'north' | 'south' | 'west' | 'east';
-  isCurrentTurn: boolean;
-  avatarUrl?: string;
-  partner?: boolean;
-  team?: number;
-  isLocal?: boolean;
-}) => (
-  <View style={[styles.player, styles[position], isCurrentTurn && styles.currentPlayerTurn, player.disconnected && styles.disconnectedPlayer]}>
-    {/* Avatar */}
-    {avatarUrl ? (
-      <View style={{ marginBottom: 4 }}>
-        <Image source={{ uri: avatarUrl }} style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: isCurrentTurn ? '#facc15' : '#fff' }} />
-      </View>
-    ) : null}
-    <Text style={styles.playerName}>{player.name}</Text>
-    {team !== undefined && (
-      <Text style={{ color: team === 1 ? '#facc15' : '#60a5fa', fontWeight: 'bold', fontSize: 12 }}>
-        Team {team}
-        {partner ? ' (Partner)' : ''}
-      </Text>
-    )}
-    {player.disconnected && <Text style={styles.disconnectedText}>Disconnected</Text>}
-    {/* Show card backs for other players */}
-    {/* {!isLocal && player.hand && player.hand.length > 0 && (
-      <View style={styles.opponentHand}>
-        {player.hand.map((_, index) => (
-          <View key={index} style={styles.cardBack}>
-            <CardBackView cardBackTheme="default_back" />
-          </View>
-        ))}
-      </View>
-    )} */}
-  </View>
-);
-
-const BazarBiddingControls = ({ onBid, onPass, currentBid }: { onBid: (suit: TrumpSuit, points: number) => void; onPass: () => void; currentBid: number }) => {
-  const [selectedSuit, setSelectedSuit] = useState<TrumpSuit | null>(null);
-  const [selectedPoints, setSelectedPoints] = useState<number>(currentBid + 10);
-  const bidOptions = Array.from({ length: 9 }, (_, i) => currentBid + 10 + i * 10);
-
-  // Valid trump suits for bidding (exclude HIDDEN)
-  const validTrumpSuits: TrumpSuit[] = [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades, 'No-Trump'];
-
-  const handleBid = () => {
-    if (selectedSuit && selectedPoints) {
-      onBid(selectedSuit, selectedPoints);
-    }
-  };
-
-  return (
-    <View style={styles.biddingControlsContainer}>
-      <Text style={styles.biddingTitle}>Your Bid</Text>
-      <View style={styles.bidSelectorRow}>
-        {validTrumpSuits.map(suit => (
-          <Pressable 
-            key={suit} 
-            style={[styles.suitButton, selectedSuit === suit && styles.selectedButton]} 
-            onPress={() => {
-              console.log('Suit selected:', suit);
-              setSelectedSuit(suit);
-            }}
-          >
-            <Text style={styles.suitButtonText}>{suit === 'No-Trump' ? 'NT' : suit.charAt(0)}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pointsScrollView}>
-        {bidOptions.map(points => (
-            <Pressable key={points} style={[styles.pointsButton, selectedPoints === points && styles.selectedButton]} onPress={() => setSelectedPoints(points)}>
-                <Text style={styles.pointsButtonText}>{points}</Text>
-            </Pressable>
-        ))}
-      </ScrollView>
-      <View style={styles.actionButtonsRow}>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.passButton]} 
-          onPress={() => {
-            console.log('Pass button pressed - TEST');
-            Alert.alert('Button Test', 'Pass button works!');
-            onPass();
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.actionButtonText}>Pass</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[
-            styles.actionButton, 
-            styles.bidButton,
-            !selectedSuit && styles.disabledButton
-          ]} 
-          onPress={() => {
-            console.log('Bid button pressed - TEST, selectedSuit:', selectedSuit, 'selectedPoints:', selectedPoints);
-            Alert.alert('Button Test', `Bid button works! ${selectedSuit ? `${selectedPoints} ${selectedSuit}` : 'No suit selected'}`);
-            if (selectedSuit) {
-              handleBid();
-            }
-          }}
-          disabled={!selectedSuit}
-          activeOpacity={selectedSuit ? 0.7 : 0.3}
-        >
-          <Text style={[styles.actionButtonText, !selectedSuit && styles.disabledButtonText]}>Bid</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
 export default function GameScreen() {
-  const router = useRouter();
-  
   const { socket, gameState, setGameState, suggestion, clearSuggestion } = useSocket();
   const { authState } = useAuth();
   const [timeLeft, setTimeLeft] = useState(TURN_DURATION_SECONDS);
   const timerRef = useRef<number | null>(null);
 
-  // Debug: Log player identification
-  useEffect(() => {
-    if (gameState && authState.username) {
-      console.log(`[PLAYER-DEBUG] ${authState.username} - Game state updated. Current turn: ${gameState.players[gameState.currentTurnPlayerIndex]?.name}`);
-    }
-  }, [gameState, authState.username]);
+  // Memoize local player data to prevent unnecessary rerenders
+  const localPlayerData = useMemo(() => {
+    if (!gameState) return null;
+    
+    const localPlayerIndex = gameState.players?.findIndex(
+      p => p.id === authState.userId || p.name === authState.username
+    );
+    
+    return {
+      localPlayerIndex: localPlayerIndex >= 0 ? localPlayerIndex : 0,
+      humanPlayer: gameState.players[localPlayerIndex >= 0 ? localPlayerIndex : 0]
+    };
+  }, [gameState, authState.userId, authState.username]);
 
-  // Log local player and turn info for debugging
-  // React.useEffect(() => {
-  //   if (!gameState) return;
-  //   // Find the local player by matching userId or username from authState
-  //   const localPlayer = gameState.players.find(
-  //     p => p.id === authState.userId || p.name === authState.username
-  //   ) || gameState.players[0];
-  //   const currentTurnPlayer = gameState.players[gameState.currentTurnPlayerIndex];
-  //   console.log('[PlayerMapping] localPlayer:', authState,localPlayer?.id, localPlayer?.name, '| currentTurnPlayer:', currentTurnPlayer?.id, currentTurnPlayer?.name, '| currentTurnPlayerIndex:', gameState.currentTurnPlayerIndex);
-  // }, [gameState, authState.userId, authState.username]);
+  // Memoize game phase states
+  const gamePhases = useMemo(() => {
+    if (!gameState) return {
+      isBiddingPhase: false,
+      isPlayingPhase: false,
+      isScoringPhase: false,
+      isFinishedPhase: false,
+      isHumanTurn: false
+    };
+    
+    return {
+      isBiddingPhase: gameState.phase === GamePhase.Bidding,
+      isPlayingPhase: gameState.phase === GamePhase.Playing,
+      isScoringPhase: gameState.phase === GamePhase.Scoring,
+      isFinishedPhase: gameState.phase === GamePhase.Finished,
+      isHumanTurn: localPlayerData?.localPlayerIndex !== undefined && 
+                   gameState.currentTurnPlayerIndex === localPlayerData.localPlayerIndex
+    };
+  }, [gameState, localPlayerData]);
 
+  // Memoize theme and stable data
+  const tableThemeColor = useMemo(() => 
+    tableThemes[authState.preferences?.tableTheme || 'green_felt'], 
+    [authState.preferences?.tableTheme]
+  );
+
+  // Layout animation effect - memoized dependencies
+  const trickLength = gameState?.currentTrick.length;
+  const handLength = gameState?.players[0]?.hand.length;
+  const phase = gameState?.phase;
+  
   useEffect(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
-  }, [gameState?.currentTrick.length, gameState?.players[0].hand.length, gameState?.phase]);
+  }, [trickLength, handLength, phase]);
 
+  // Timer effect - optimized with proper dependencies
   useEffect(() => {
     if (timerRef.current) {
-        clearInterval(timerRef.current);
+      clearInterval(timerRef.current);
     }
-    if (gameState && gameState.players[gameState.currentTurnPlayerIndex].id === gameState.players[0].id) {
-        setTimeLeft(TURN_DURATION_SECONDS);
-        timerRef.current = setInterval(() => {
-            setTimeLeft(prevTime => (prevTime > 0 ? prevTime - 1 : 0));
-        }, 1000) as unknown as number;
+    
+    if (gameState && localPlayerData && gamePhases.isHumanTurn) {
+      setTimeLeft(TURN_DURATION_SECONDS);
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prevTime => (prevTime > 0 ? prevTime - 1 : 0));
+      }, 1000) as unknown as number;
     }
+    
     return () => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-        }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     };
-  }, [gameState?.currentTurnPlayerIndex, gameState?.players[0].id]);
+  }, [gameState, localPlayerData, gamePhases.isHumanTurn]);
 
-  const handleMakeBid = (suit: TrumpSuit, points: number) => {
+  // Helper functions memoized to prevent recreations
+  const getAvatarUrl = useCallback((player: any) => player.preferences?.avatarUrl || undefined, []);
+  const getTeam = useCallback((playerIdx: number) => (playerIdx % 2 === 0 ? 1 : 2), []);
+  const isPartner = useCallback((playerIdx: number) => 
+    localPlayerData ? playerIdx !== localPlayerData.localPlayerIndex && 
+    playerIdx % 2 === localPlayerData.localPlayerIndex % 2 : false, 
+    [localPlayerData]
+  );
+
+  // Memoized handlers to prevent component rerenders
+  const handleMakeBid = useCallback((suit: TrumpSuit, points: number) => {
     console.log(`[BID-DEBUG] ${authState.username} making bid: ${points} ${suit}`);
-    if (socket && gameState) socket.emit('makeBid', { gameId: gameState.gameId, suit, points });
-  };
-  const handlePassBid = () => {
-    console.log(`[BID-DEBUG] ${authState.username} passing bid`);
-     if (socket && gameState) socket.emit('passBid', { gameId: gameState.gameId });
-  };
-  const handlePlayCard = (card: Card) => {
-    if (socket && gameState) socket.emit('playCard', { gameId: gameState.gameId, card });
-  };
-  const handleExitGame = () => {
-    clearSuggestion();
-      router.back();
-      setTimeout(() => setGameState(null), 500);
-  };
-  const handleGetSuggestion = () => {
-    if (socket && gameState) socket.emit('getSuggestion', { gameId: gameState.gameId });
-  };
+    if (socket && gameState) {
+      socket.emit('makeBid', { gameId: gameState.gameId, suit, points });
+    }
+  }, [socket, gameState, authState.username]);
 
-  if (!gameState) {
-    return <View style={styles.container}><Text>Loading game...</Text></View>;
+  const handlePassBid = useCallback(() => {
+    console.log(`[BID-DEBUG] ${authState.username} passing bid`);
+    if (socket && gameState) {
+      socket.emit('passBid', { gameId: gameState.gameId });
+    }
+  }, [socket, gameState, authState.username]);
+
+  const handlePlayCard = useCallback((card: Card) => {
+    if (socket && gameState) {
+      socket.emit('playCard', { gameId: gameState.gameId, card });
+    }
+  }, [socket, gameState]);
+
+  const handleExitGame = useCallback(() => {
+    clearSuggestion();
+    // Use router.back() equivalent - need to import from expo-router
+    // router.back();
+    setTimeout(() => setGameState(null), 500);
+  }, [clearSuggestion, setGameState]);
+
+  const handleGetSuggestion = useCallback(() => {
+    if (socket && gameState) {
+      socket.emit('getSuggestion', { gameId: gameState.gameId });
+    }
+  }, [socket, gameState]);
+
+  if (!gameState || !localPlayerData) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          {/* Loading state */}
+        </View>
+      </View>
+    );
   }
 
-  const tableThemeColor = tableThemes[authState.preferences?.tableTheme || 'green_felt'];
-  const localPlayerIndex = gameState.players?.findIndex(
-    p => p.id === authState.userId || p.name === authState.username
-  );
-  
-  // Debug player identification
-  console.log('[PLAYER-ID-DEBUG]', {
-    authUserId: authState.userId,
-    authUsername: authState.username,
-    localPlayerIndex,
-    currentTurnPlayerIndex: gameState.currentTurnPlayerIndex,
-    players: gameState.players.map(p => ({ id: p.id, name: p.name }))
-  });
-  
-  const humanPlayer = gameState.players[localPlayerIndex] || gameState.players[0];
-  const isHumanTurn = localPlayerIndex >= 0 && gameState.currentTurnPlayerIndex === localPlayerIndex;
-  const isBiddingPhase = gameState.phase === GamePhase.Bidding;
-  const isPlayingPhase = gameState.phase === GamePhase.Playing;
-  const isScoringPhase = gameState.phase === GamePhase.Scoring;
-  const isFinishedPhase = gameState.phase === GamePhase.Finished;
-
-
-  // Always show local user as south, and map others clockwise
-  // seatOrder: [south, west, north, east] = [local, (local+1)%4, (local+2)%4, (local+3)%4]
-  const seatOrder = [0, 1, 2, 3].map(i => (localPlayerIndex + i) % 4);
-
-  // Avatar URL helper
-  const getAvatarUrl = (player: Player) => player.preferences?.avatarUrl || undefined;
-
-  // Team/partner logic: Team 1 = original player indices 0 & 2, Team 2 = 1 & 3
-  const getTeam = (playerIdx: number) => (playerIdx % 2 === 0 ? 1 : 2);
-  const isPartner = (playerIdx: number) => playerIdx !== localPlayerIndex && playerIdx % 2 === localPlayerIndex % 2;
-
-  const legalMoves = isPlayingPhase && isHumanTurn ? getLegalMoves(humanPlayer, gameState) : [];
-  const legalMoveSet = new Set(legalMoves.map(c => `${c.rank}-${c.suit}`));
-
-  const isCardSuggested = (card: Card) => {
-    if (!suggestion || typeof suggestion === 'string') return false;
-    return suggestion.rank === card.rank && suggestion.suit === card.suit;
-  };
+  const { localPlayerIndex, humanPlayer } = localPlayerData;
+  const { isBiddingPhase, isPlayingPhase, isScoringPhase, isFinishedPhase, isHumanTurn } = gamePhases;
 
   return (
     <SafeAreaView style={[
       styles.container, 
       { backgroundColor: tableThemeColor },
       Platform.OS === 'android' && { paddingBottom: 20 }
-    ]}> 
-      <View style={styles.table}>
-        {/* North */}
-        <PlayerDisplay
-          player={gameState.players[seatOrder[2]]}
-          position="north"
-          isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[2]}
-          avatarUrl={getAvatarUrl(gameState.players[seatOrder[2]])}
-          partner={isPartner(seatOrder[2])}
-          team={getTeam(seatOrder[2])}
-          isLocal={false}
+    ]}>
+      <View style={styles.gameArea}>
+        {/* Game Table with all players */}
+        <GameTable 
+          players={gameState.players}
+          localPlayerIndex={localPlayerIndex}
+          currentTurnPlayerIndex={gameState.currentTurnPlayerIndex}
+          currentTrick={gameState.currentTrick}
+          getAvatarUrl={getAvatarUrl}
+          getTeam={getTeam}
+          isPartner={isPartner}
+        >
+          <TrickArea currentTrick={gameState.currentTrick} />
+        </GameTable>
+
+        {/* Game Status - Timer, Phase Info */}
+        <GameStatus
+          isHumanTurn={isHumanTurn}
+          isBiddingPhase={isBiddingPhase}
+          isScoringPhase={isScoringPhase}
+          isFinishedPhase={isFinishedPhase}
+          humanPlayer={humanPlayer}
+          timeLeft={timeLeft}
+          winningTeam={gameState.winningTeam}
+          localPlayerIndex={localPlayerIndex}
+          getAvatarUrl={getAvatarUrl}
+          getTeam={getTeam}
+          isPartner={isPartner}
         />
-        <View style={styles.middleRow}>
-          {/* West */}
-          <PlayerDisplay
-            player={gameState.players[seatOrder[1]]}
-            position="west"
-            isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[1]}
-            avatarUrl={getAvatarUrl(gameState.players[seatOrder[1]])}
-            partner={isPartner(seatOrder[1])}
-            team={getTeam(seatOrder[1])}
-            isLocal={false}
-          />
-          <View style={styles.trickArea}>
-            {gameState.currentTrick.map(({ card }) => (
-                <View key={`${card.suit}-${card.rank}`} style={styles.trickCard}>
-                    <CardView card={card} />
-                </View>
-            ))}
-          </View>
-          {/* East */}
-          <PlayerDisplay
-            player={gameState.players[seatOrder[3]]}
-            position="east"
-            isCurrentTurn={gameState.currentTurnPlayerIndex === seatOrder[3]}
-            avatarUrl={getAvatarUrl(gameState.players[seatOrder[3]])}
-            partner={isPartner(seatOrder[3])}
-            team={getTeam(seatOrder[3])}
-            isLocal={false}
-          />
-        </View>
-        <View style={styles.southPlayerContainer}>
-            {isHumanTurn && !isBiddingPhase && !isScoringPhase && !isFinishedPhase && <TurnTimer timeLeft={timeLeft} />}
-            {isScoringPhase && (
-                <View style={styles.scoringBox}>
-                    <Text style={styles.scoringTitle}>Round Over!</Text>
-                </View>
-            )}
-            {isFinishedPhase && (
-                <View style={styles.scoringBox}>
-                    <Text style={styles.scoringTitle}>Game Over!</Text>
-                    <Text style={styles.gameOverText}>{gameState.winningTeam} wins!</Text>
-                </View>
-            )}
-            {!isBiddingPhase && !isScoringPhase && !isFinishedPhase && (
-                 <PlayerDisplay
-                   player={humanPlayer}
-                   position="south"
-                   isCurrentTurn={isHumanTurn}
-                   avatarUrl={getAvatarUrl(humanPlayer)}
-                   partner={isPartner(localPlayerIndex)}
-                   team={getTeam(localPlayerIndex)}
-                   isLocal={true}
-                 />
-            )}
-        </View>
       </View>
 
       <View style={styles.humanPlayerArea}>
-        <View style={styles.infoBox}>
-            <View style={styles.infoButtonContainer}>
-              <Button title="Exit" onPress={handleExitGame} color="#f87171" />
-            </View>
-            <View style={styles.bidInfo}>
-                <Text style={styles.scoreText}>T1: {gameState.teamScores.team1} | T2: {gameState.teamScores.team2}</Text>
-                <Text style={styles.infoText}>Bid: {gameState.winningBid ? `${gameState.winningBid.points} ${gameState.winningBid.suit}` : 'None'}</Text>
-            </View>
-            <View style={styles.infoButtonContainer}>
-                {isHumanTurn && <Button title="Hint" onPress={handleGetSuggestion} color="#facc15" />}
-            </View>
-        </View>
+        {/* Game Info - Scores, Bids, Actions */}
+        <GameInfo
+          teamScores={gameState.teamScores}
+          winningBid={gameState.winningBid}
+          isHumanTurn={isHumanTurn}
+          onExitGame={handleExitGame}
+          onGetSuggestion={handleGetSuggestion}
+        />
         
-        {/* Always show player's hand */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handContainer}>
-          {humanPlayer.hand.filter(card => card.suit !== Suit.HIDDEN).map((card) => (
-            <CardView 
-                key={`${card.suit}-${card.rank}`} 
-                card={card} 
-                onPress={isBiddingPhase ? undefined : () => handlePlayCard(card)}
-                isPlayable={!isBiddingPhase && (!isPlayingPhase || !isHumanTurn || legalMoveSet.has(`${card.rank}-${card.suit}`))}
-                isSuggested={!isBiddingPhase && isCardSuggested(card)}
-            />
-          ))}
-        </ScrollView>
+        {/* Player Hand */}
+        <PlayerHand
+          hand={humanPlayer.hand.filter(card => card.suit !== Suit.HIDDEN)}
+          isBiddingPhase={isBiddingPhase}
+          isPlayingPhase={isPlayingPhase}
+          isHumanTurn={isHumanTurn}
+          legalMoveSet={new Set()} // Will need to calculate legal moves
+          isCardSuggested={(card: Card) => {
+            if (!suggestion || typeof suggestion === 'string') return false;
+            return suggestion.rank === card.rank && suggestion.suit === card.suit;
+          }}
+          onPlayCard={handlePlayCard}
+        />
         
-        {/* Show bidding controls during bidding phase */}
+        {/* Bidding Controls */}
         {isBiddingPhase && (
           <View style={styles.biddingContainer}>
             {isHumanTurn ? (
-              <BazarBiddingControls onBid={handleMakeBid} onPass={handlePassBid} currentBid={gameState.winningBid?.points || 80} />
+              <BiddingControls 
+                onBid={handleMakeBid} 
+                onPass={handlePassBid} 
+                currentBid={gameState.winningBid?.points || 80} 
+              />
             ) : (
               <View style={styles.waitingContainer}>
-                <Text style={styles.waitingText}>Waiting for {gameState.players[gameState.currentTurnPlayerIndex].name} to bid...</Text>
+                {/* Waiting for other player to bid */}
               </View>
             )}
           </View>
@@ -376,41 +235,24 @@ export default function GameScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  table: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
-  middleRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' },
-  trickArea: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 110, paddingHorizontal: 10 },
-  trickCard: { marginHorizontal: -20 },
-  player: { padding: 10, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: 90, minHeight: 60 },
-  currentPlayerTurn: { borderColor: '#facc15', shadowColor: '#facc15', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10 },
-  disconnectedPlayer: { opacity: 0.5, backgroundColor: '#4b5563' },
-  disconnectedText: { color: '#f9fafb', fontWeight: 'bold', fontSize: 12 },
-  playerName: { fontWeight: 'bold', color: '#fff', fontSize: 14 },
-  playerInfo: { fontSize: 12, color: '#fff', marginTop: 4, height: 15 },
-  opponentHand: { flexDirection: 'row', marginTop: 4, height: 15, minWidth: 70, alignItems: 'center', justifyContent: 'center' },
-  north: { alignSelf: 'center', marginBottom: 10 },
-  south: { alignSelf: 'center', marginTop: 10 },
-  west: {},
-  east: {},
-  southPlayerContainer: { height: 120, justifyContent: 'center', alignItems: 'center', gap: 10 },
+  container: { 
+    flex: 1 
+  },
+  gameArea: {
+    flex: 1,
+    justifyContent: 'space-between'
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   humanPlayerArea: { 
     backgroundColor: 'rgba(0,0,0,0.2)', 
     borderTopColor: 'rgba(255,255,255,0.2)', 
     borderTopWidth: 1,
     paddingBottom: Platform.OS === 'android' ? 15 : 5
   },
-  handContainer: { 
-    paddingVertical: 8, 
-    paddingHorizontal: 10, 
-    alignItems: 'center', 
-    height: 100,
-    marginBottom: Platform.OS === 'android' ? 10 : 0
-  },
-  infoBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.2)' },
-  infoButtonContainer: { flex: 1, alignItems: 'center' },
-  bidInfo: { flex: 2, alignItems: 'center' },
-  infoText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  scoreText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   biddingContainer: { 
     paddingVertical: 15, 
     alignItems: 'center', 
@@ -420,59 +262,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, 
     borderTopColor: 'rgba(255,255,255,0.2)' 
   },
-  biddingControlsContainer: { 
+  waitingContainer: { 
+    justifyContent: 'center', 
     alignItems: 'center', 
-    width: '100%', 
-    paddingHorizontal: 20,
-    gap: 10 
+    paddingVertical: 20 
   },
-  biddingTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  bidSelectorRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 8 },
-  suitButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
-  selectedButton: { borderColor: '#facc15' },
-  suitButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  pointsScrollView: { width: '100%', marginBottom: 8 },
-  pointsButton: { width: 55, height: 35, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', borderRadius: 8, marginHorizontal: 4, borderWidth: 2, borderColor: 'transparent' },
-  pointsButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  actionButtonsRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    width: '100%', 
-    paddingHorizontal: 20,
-    marginTop: 15,
-    zIndex: 1000, 
-    elevation: 1000
-  },
-  actionButton: { 
-    minWidth: 100,
-    marginHorizontal: 10,
-    paddingVertical: 15, 
-    paddingHorizontal: 25, 
-    borderRadius: 10, 
-    minHeight: 50, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8
-  },
-  passButton: { backgroundColor: '#dc2626' },
-  bidButton: { backgroundColor: '#16a34a' },
-  disabledButton: { backgroundColor: '#6b7280', opacity: 0.5 },
-  actionButtonText: { 
-    color: '#fff', 
-    fontWeight: 'bold', 
-    fontSize: 16,
-    textAlign: 'center'
-  },
-  disabledButtonText: { color: '#d1d5db' },
-  scoringBox: { padding: 20, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10, alignItems: 'center' },
-  scoringTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 10 },
-  gameOverText: { fontSize: 22, fontWeight: 'bold', color: '#facc15', marginBottom: 10 },
-  cardBack: { width: 15, height: 20, marginHorizontal: 1 },
-  waitingContainer: { justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
-  waitingText: { color: '#fff', fontSize: 16, fontStyle: 'italic', textAlign: 'center' },
 });
